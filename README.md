@@ -72,6 +72,8 @@ For single-config generators, the default build type is `RelWithDebInfo`.
 
 That default configure is a CPU build unless you enable an accelerator backend explicitly.
 
+Use GCC 13 or newer for Linux builds.
+
 Common Linux configure examples:
 
 CPU-only:
