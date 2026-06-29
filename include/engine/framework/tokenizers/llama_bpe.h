@@ -78,6 +78,7 @@ public:
     TokenizedText tokenize(const std::string & text) const override;
 
     std::vector<int32_t> encode(const std::string & text) const;
+    std::vector<int32_t> encode(const std::string & text, bool parse_special) const;
     std::string decode(const std::vector<int32_t> & token_ids, bool skip_special_tokens = false) const;
 
     std::optional<int32_t> find_token_id(const std::string & token) const;

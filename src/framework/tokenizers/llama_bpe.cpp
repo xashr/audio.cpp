@@ -225,7 +225,9 @@ struct LlamaBpeTokenizer::Impl {
             const auto tokenizer_json = engine::io::json::parse_file(*spec.tokenizer_json_path);
             load_added_tokens_from_tokenizer_json(tokenizer_json, vocab);
         }
-        load_added_tokens_from_config(spec.tokenizer_config_path, vocab);
+        if (!spec.tokenizer_config_path.empty()) {
+            load_added_tokens_from_config(spec.tokenizer_config_path, vocab);
+        }
         vendor::rebuild_special_tokens_cache(vocab);
     }
 
@@ -245,6 +247,10 @@ TokenizedText LlamaBpeTokenizer::tokenize(const std::string & text) const {
 
 std::vector<int32_t> LlamaBpeTokenizer::encode(const std::string & text) const {
     return vendor::tokenize_bpe(impl_->vocab, text, true);
+}
+
+std::vector<int32_t> LlamaBpeTokenizer::encode(const std::string & text, const bool parse_special) const {
+    return vendor::tokenize_bpe(impl_->vocab, text, parse_special);
 }
 
 std::string LlamaBpeTokenizer::decode(const std::vector<int32_t> & token_ids, const bool skip_special_tokens) const {

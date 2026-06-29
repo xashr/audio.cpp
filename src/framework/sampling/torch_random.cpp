@@ -1,8 +1,16 @@
 #include "engine/framework/sampling/torch_random.h"
 
+#include "engine/framework/debug/trace.h"
+#include "engine/framework/io/dynamic_library.h"
+#ifdef ENGINE_HAS_CUDA_TORCH_RANDOM
+#include "torch_random_cuda_runtime.h"
+#endif
+
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <stdexcept>
+#include <string>
 
 namespace engine::sampling {
 namespace {
@@ -120,6 +128,21 @@ float torch_cuda_uniform_tensor_iterator_element(
     return static_cast<float>(value) * kInvTwoPow32 + (kInvTwoPow32 * 0.5F);
 }
 
+uint64_t torch_cuda_tensor_iterator_stride(uint64_t total_elements, const TorchCudaSamplingPolicy & policy) {
+    if (policy.multiprocessor_count <= 0 || policy.max_threads_per_multiprocessor <= 0) {
+        throw std::invalid_argument("torch CUDA TensorIterator randn requires CUDA device properties");
+    }
+    constexpr uint64_t block_size = 256;
+    uint64_t grid = (total_elements + block_size - 1) / block_size;
+    uint64_t blocks_per_sm = static_cast<uint64_t>(policy.max_threads_per_multiprocessor) / block_size;
+    if (blocks_per_sm == 0) {
+        blocks_per_sm = 1;
+    }
+    const uint64_t grid_cap = static_cast<uint64_t>(policy.multiprocessor_count) * blocks_per_sm;
+    grid = std::max<uint64_t>(1, std::min(grid_cap, grid));
+    return block_size * grid;
+}
+
 float round_to_bfloat16(float value) {
     uint32_t bits = 0;
     static_assert(sizeof(bits) == sizeof(value));
@@ -161,6 +184,96 @@ std::vector<float> generate_torch_cuda_randn(
     return output;
 }
 
+void fill_torch_cuda_tensor_iterator_randn(
+    float * output,
+    size_t count,
+    uint64_t seed,
+    uint64_t offset_blocks,
+    const TorchCudaSamplingPolicy & policy,
+    TorchRandnPrecision precision) {
+    if (output == nullptr && count != 0) {
+        throw std::invalid_argument("torch CUDA TensorIterator randn output pointer is null");
+    }
+    if (count == 0) {
+        return;
+    }
+#ifdef ENGINE_HAS_CUDA_TORCH_RANDOM
+    if (policy.cuda_fast_path) {
+        detail::fill_torch_cuda_tensor_iterator_randn_cuda(
+            output,
+            count,
+            seed,
+            offset_blocks,
+            policy,
+            precision);
+        return;
+    }
+#else
+    if (policy.cuda_fast_path) {
+        throw std::runtime_error("torch CUDA TensorIterator randn fast path was requested but CUDA runtime was not built");
+    }
+#endif
+    constexpr uint64_t unroll_factor = 4;
+    const uint64_t total = static_cast<uint64_t>(count);
+    const uint64_t stride = torch_cuda_tensor_iterator_stride(total, policy);
+    const uint64_t loop_count = (total + stride * unroll_factor - 1) / (stride * unroll_factor);
+    const int64_t parallel_count = static_cast<int64_t>(stride);
+#pragma omp parallel for if (parallel_count >= 65536)
+    for (int64_t sequence_index = 0; sequence_index < parallel_count; ++sequence_index) {
+        const uint64_t sequence = static_cast<uint64_t>(sequence_index);
+        for (uint64_t loop_index = 0; loop_index < loop_count; ++loop_index) {
+            const uint64_t first_index = loop_index * unroll_factor * stride + sequence;
+            if (first_index >= total) {
+                continue;
+            }
+            const Philox4 random = philox_4x32_10(
+                Philox4{
+                    static_cast<uint32_t>(offset_blocks + loop_index),
+                    static_cast<uint32_t>((offset_blocks + loop_index) >> 32U),
+                    static_cast<uint32_t>(sequence),
+                    static_cast<uint32_t>(sequence >> 32U),
+                },
+                seed);
+            float normal0 = 0.0F;
+            float normal1 = 0.0F;
+            float normal2 = 0.0F;
+            float normal3 = 0.0F;
+            box_muller(random.x, random.y, normal0, normal1);
+            box_muller(random.z, random.w, normal2, normal3);
+            if (precision == TorchRandnPrecision::BFloat16) {
+                normal0 = round_to_bfloat16(normal0);
+                normal1 = round_to_bfloat16(normal1);
+                normal2 = round_to_bfloat16(normal2);
+                normal3 = round_to_bfloat16(normal3);
+            }
+            output[static_cast<size_t>(first_index)] = normal0;
+            const uint64_t second_index = first_index + stride;
+            if (second_index < total) {
+                output[static_cast<size_t>(second_index)] = normal1;
+            }
+            const uint64_t third_index = second_index + stride;
+            if (third_index < total) {
+                output[static_cast<size_t>(third_index)] = normal2;
+            }
+            const uint64_t fourth_index = third_index + stride;
+            if (fourth_index < total) {
+                output[static_cast<size_t>(fourth_index)] = normal3;
+            }
+        }
+    }
+}
+
+std::vector<float> generate_torch_cuda_tensor_iterator_randn(
+    size_t count,
+    uint64_t seed,
+    uint64_t offset_blocks,
+    const TorchCudaSamplingPolicy & policy,
+    TorchRandnPrecision precision) {
+    std::vector<float> output(count);
+    fill_torch_cuda_tensor_iterator_randn(output.data(), output.size(), seed, offset_blocks, policy, precision);
+    return output;
+}
+
 void fill_torch_cuda_uniform(float * output, size_t count, uint64_t seed, uint64_t start_index) {
     if (output == nullptr && count != 0) {
         throw std::invalid_argument("torch CUDA uniform output pointer is null");
@@ -174,6 +287,115 @@ std::vector<float> generate_torch_cuda_uniform(size_t count, uint64_t seed, uint
     std::vector<float> output(count);
     fill_torch_cuda_uniform(output.data(), output.size(), seed, start_index);
     return output;
+}
+
+namespace {
+
+void log_default_policy(std::string_view category, std::string_view reason) {
+    engine::debug::log_message(
+        engine::debug::LogLevel::Warning,
+        category,
+        std::string("using default Torch RNG layout policy ")
+            + "(multiprocessor_count=1, max_threads_per_multiprocessor=256): " + std::string(reason));
+}
+
+}  // namespace
+
+TorchCudaSamplingPolicy resolve_torch_cuda_sampling_policy(
+    engine::core::BackendType backend_type,
+    int device_index,
+    std::string_view log_category,
+    std::string_view model_name,
+    TorchCudaSamplingPolicyFailureMode failure_mode) {
+    TorchCudaSamplingPolicy policy;
+    if (backend_type != engine::core::BackendType::Cuda) {
+        log_default_policy(log_category, "backend is not CUDA");
+        return policy;
+    }
+#ifdef GGML_USE_CUDA
+    const engine::io::DynamicLibraryHandle driver = engine::io::open_dynamic_library(
+        {"libcuda.so.1", "libcuda.so", "libcuda.dylib", "nvcuda.dll"});
+    if (driver == nullptr) {
+        if (failure_mode == TorchCudaSamplingPolicyFailureMode::FallbackToDefault) {
+            log_default_policy(log_category, "CUDA driver library was not found");
+            return policy;
+        }
+        throw std::runtime_error(std::string(model_name) +
+                                 " CUDA sampling policy probe failed: CUDA driver library was not found");
+    }
+    using CuInitFn = int (*)(unsigned int);
+    using CuDeviceGetFn = int (*)(int *, int);
+    using CuDeviceGetAttributeFn = int (*)(int *, int, int);
+    auto cu_init = reinterpret_cast<CuInitFn>(engine::io::dynamic_library_symbol(driver, "cuInit"));
+    auto cu_device_get = reinterpret_cast<CuDeviceGetFn>(engine::io::dynamic_library_symbol(driver, "cuDeviceGet"));
+    auto cu_device_get_attribute =
+        reinterpret_cast<CuDeviceGetAttributeFn>(engine::io::dynamic_library_symbol(driver, "cuDeviceGetAttribute"));
+    if (cu_init == nullptr || cu_device_get == nullptr || cu_device_get_attribute == nullptr) {
+        engine::io::close_dynamic_library(driver);
+        if (failure_mode == TorchCudaSamplingPolicyFailureMode::FallbackToDefault) {
+            log_default_policy(log_category, "CUDA driver symbols were not resolved");
+            return policy;
+        }
+        throw std::runtime_error(std::string(model_name) +
+                                 " CUDA sampling policy probe failed: CUDA driver symbols were not resolved");
+    }
+
+    int device = 0;
+    int multiprocessor_count = 0;
+    int max_threads_per_multiprocessor = 0;
+    constexpr int kCuDeviceAttributeMultiprocessorCount = 16;
+    constexpr int kCuDeviceAttributeMaxThreadsPerMultiprocessor = 39;
+    const bool ok = cu_init(0) == 0 && cu_device_get(&device, device_index) == 0 &&
+                    cu_device_get_attribute(&multiprocessor_count, kCuDeviceAttributeMultiprocessorCount, device) == 0 &&
+                    cu_device_get_attribute(
+                        &max_threads_per_multiprocessor,
+                        kCuDeviceAttributeMaxThreadsPerMultiprocessor,
+                        device) == 0;
+    engine::io::close_dynamic_library(driver);
+    if (!ok || multiprocessor_count <= 0 || max_threads_per_multiprocessor <= 0) {
+        if (failure_mode == TorchCudaSamplingPolicyFailureMode::FallbackToDefault) {
+            log_default_policy(log_category, "CUDA device attributes were not queried");
+            return policy;
+        }
+        throw std::runtime_error(std::string(model_name) +
+                                 " CUDA sampling policy probe failed: CUDA device attributes are invalid");
+    }
+
+    policy.multiprocessor_count = multiprocessor_count;
+    policy.max_threads_per_multiprocessor = max_threads_per_multiprocessor;
+    policy.cuda_fast_path = true;
+    policy.cuda_device_index = device_index;
+    return policy;
+#else
+    (void) device_index;
+    if (failure_mode == TorchCudaSamplingPolicyFailureMode::FallbackToDefault) {
+        log_default_policy(log_category, "build does not include CUDA support");
+        return policy;
+    }
+    throw std::runtime_error(std::string(model_name) + " generation requires a build with CUDA support");
+#endif
+}
+
+uint64_t torch_cuda_tensor_iterator_offset_blocks(
+    uint64_t total_elements,
+    const TorchCudaSamplingPolicy & policy) {
+    if (total_elements == 0) {
+        throw std::invalid_argument("torch CUDA TensorIterator offset requires elements");
+    }
+    if (policy.multiprocessor_count <= 0 || policy.max_threads_per_multiprocessor <= 0) {
+        throw std::invalid_argument("torch CUDA TensorIterator offset requires CUDA device properties");
+    }
+    constexpr uint64_t block_size = 256;
+    constexpr uint64_t unroll_factor = 4;
+    uint64_t grid = (total_elements + block_size - 1) / block_size;
+    uint64_t blocks_per_sm = static_cast<uint64_t>(policy.max_threads_per_multiprocessor) / block_size;
+    if (blocks_per_sm == 0) {
+        blocks_per_sm = 1;
+    }
+    const uint64_t grid_cap = static_cast<uint64_t>(policy.multiprocessor_count) * blocks_per_sm;
+    grid = std::max<uint64_t>(1, std::min(grid_cap, grid));
+    const uint64_t stride = block_size * grid;
+    return ((total_elements - 1) / (stride * unroll_factor) + 1);
 }
 
 float torch_cuda_tensor_iterator_exponential_element(

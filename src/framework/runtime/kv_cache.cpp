@@ -103,6 +103,14 @@ void TransformerKVCache::advance_after_direct_append(int64_t steps) {
     current_end_ += steps;
 }
 
+void TransformerKVCache::retain_prefix(int64_t prefix_steps) {
+    if (prefix_steps < 0 || prefix_steps > valid_steps_) {
+        throw std::runtime_error("TransformerKVCache prefix length exceeds current state");
+    }
+    valid_steps_ = prefix_steps;
+    current_end_ = prefix_steps;
+}
+
 int64_t TransformerKVCache::valid_steps() const noexcept {
     return valid_steps_;
 }

@@ -3,6 +3,16 @@
 #include "engine/framework/debug/trace.h"
 #include "engine/framework/io/config.h"
 #include "engine/framework/io/filesystem.h"
+// Development registry entries from Share/AudioCPP that are not present in this release tree yet:
+// #include "engine/models/ace_step/loader.h"
+// #include "engine/models/demucs/session.h"
+// #include "engine/models/heartmula/loader.h"
+// #include "engine/models/higgs_tts/loader.h"
+// #include "engine/models/kokoro_tts/loader.h"
+// #include "engine/models/moss_tts/loader.h"
+// #include "engine/models/parakeet_tdt/loader.h"
+// #include "engine/models/roformer/session.h"
+// #include "engine/models/vibevoice/loader.h"
 #include "engine/models/chatterbox/loader.h"
 #include "engine/models/citrinet_asr/session.h"
 #include "engine/models/marblenet_vad/session.h"
@@ -194,6 +204,16 @@ ModelRegistry make_registry_from_config(
 
 ModelRegistry make_default_registry(const std::optional<std::filesystem::path> & config_path) {
     const std::vector<std::shared_ptr<IVoiceModelLoader>> available_loaders = {
+        // Development registry entries from Share/AudioCPP that are not present in this release tree yet:
+        // engine::models::kokoro_tts::make_kokoro_tts_loader(),
+        // engine::models::ace_step::make_ace_step_loader(),
+        // engine::models::demucs::make_htdemucs_loader(),
+        // engine::models::roformer::make_mel_loader(),
+        // engine::models::moss_tts::make_moss_tts_loader(),
+        // engine::models::vibevoice::make_vibevoice_loader(),
+        // engine::models::heartmula::make_heartmula_loader(),
+        // engine::models::higgs_tts::make_higgs_tts_loader(),
+        // engine::models::parakeet_tdt::make_parakeet_tdt_loader(),
         engine::models::omnivoice::make_omnivoice_loader(),
         engine::models::miocodec::make_miocodec_loader(),
         engine::models::miotts::make_miotts_loader(),

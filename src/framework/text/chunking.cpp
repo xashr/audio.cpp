@@ -139,7 +139,7 @@ std::vector<std::string> split_text_chunks(
         }
 
         size_t chunk_end = hard_end;
-        if (hard_end > word_start + 1) {
+        if (hard_end < words.size() && hard_end > word_start + 1) {
             for (size_t i = hard_end; i > word_start + 1; --i) {
                 if (words[i - 1].sentence_break) {
                     chunk_end = i;

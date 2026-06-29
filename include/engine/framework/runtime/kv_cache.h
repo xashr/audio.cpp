@@ -32,6 +32,7 @@ public:
     TransformerKVState export_state() const;
 
     void advance_after_direct_append(int64_t steps);
+    void retain_prefix(int64_t prefix_steps);
 
     int64_t valid_steps() const noexcept;
     int64_t current_end() const noexcept;
