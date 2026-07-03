@@ -111,6 +111,29 @@ curl http://127.0.0.1:8080/v1/audio/transcriptions \
   }'
 ```
 
+Also accepts a `multipart/form-data` upload, matching the OpenAI Whisper API convention used by real clients (e.g. Open WebUI). The request is routed to the multipart path based on the `Content-Type` header; the JSON path above still works unchanged.
+
+```bash
+curl http://127.0.0.1:8080/v1/audio/transcriptions \
+  -F model=qwen3-asr \
+  -F language=en \
+  -F file=@/path/to/input.wav
+```
+
+`file` and `model` are required; `language` is optional. The uploaded bytes are spooled to a temporary file for the duration of the request and removed afterward.
+
+### `GET /v1/audio/voices?model=<id>`
+
+Lists the cached voice ids available for a TTS model, so a client can populate a voice picker instead of guessing generic names. For families that keep voice presets under `model_root/embeddings/*.safetensors` (`pocket_tts` today), this returns those ids; for other families, or an unknown/missing `model` parameter, it returns an empty list.
+
+```bash
+curl 'http://127.0.0.1:8080/v1/audio/voices?model=pocket-tts'
+```
+
+```json
+{"voices": ["alba", "cosette", "marius"]}
+```
+
 ### `POST /v1/tasks/run`
 
 Generic framework request route. The `request` object uses the same JSON fields as the `audiocpp_cli` request sequence format.
