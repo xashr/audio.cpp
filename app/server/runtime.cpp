@@ -34,6 +34,26 @@ std::filesystem::path resolve_path(const std::filesystem::path & base, const std
     return path.is_absolute() ? path : base / path;
 }
 
+// Minimal application/x-www-form-urlencoded query string lookup, e.g.
+// query_param("model=pocket-tts&foo=bar", "model") -> "pocket-tts".
+std::string query_param(const std::string & query, const std::string & key) {
+    size_t pos = 0;
+    while (pos < query.size()) {
+        const size_t amp = query.find('&', pos);
+        const std::string pair = query.substr(pos, amp == std::string::npos ? std::string::npos : amp - pos);
+        const auto eq = pair.find('=');
+        const std::string name = pair.substr(0, eq);
+        if (name == key) {
+            return eq == std::string::npos ? "" : pair.substr(eq + 1);
+        }
+        if (amp == std::string::npos) {
+            break;
+        }
+        pos = amp + 1;
+    }
+    return {};
+}
+
 const char * backend_name(engine::core::BackendType type) {
     switch (type) {
         case engine::core::BackendType::Cpu:
@@ -409,6 +429,9 @@ HttpResponse ServerState::handle(const HttpRequest & request) {
     if (request.method == "GET" && request.path == "/v1/models") {
         return json_response(models_json());
     }
+    if (request.method == "GET" && request.path == "/v1/audio/voices") {
+        return handle_voices(request);
+    }
     if (request.method == "POST" && request.path == "/v1/audio/speech") {
         return handle_speech(request.body);
     }
@@ -597,6 +620,42 @@ HttpResponse ServerState::handle_generic_run(const std::string & body_text) {
         request_base_);
     const auto timed_result = run_model(model, request);
     return json_response(task_result_json(timed_result.result, timed_result.wall_ms));
+}
+
+// Cached-voice discovery for the "voice"/cached_voice_id request field. Families that
+// support voice presets (e.g. pocket_tts, see assets.cpp: model_root/embeddings/<id>.safetensors)
+// keep them under an "embeddings" directory next to the model weights; other families simply
+// have no such directory and report no voices. Used by clients (llama-swap's playground, and
+// potentially Open WebUI) that call GET /v1/audio/voices?model=<id> to populate a voice picker
+// instead of guessing generic names like "alloy"/"nova".
+HttpResponse ServerState::handle_voices(const HttpRequest & request) const {
+    const std::string model_id = query_param(request.query, "model");
+    std::vector<std::string> voices;
+
+    const auto it = model_index_.find(model_id);
+    if (it != model_index_.end()) {
+        const auto embeddings_dir = models_.at(it->second)->config.path / "embeddings";
+        std::error_code ec;
+        if (std::filesystem::is_directory(embeddings_dir, ec)) {
+            for (const auto & entry : std::filesystem::directory_iterator(embeddings_dir, ec)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".safetensors") {
+                    voices.push_back(entry.path().stem().string());
+                }
+            }
+        }
+    }
+    std::sort(voices.begin(), voices.end());
+
+    std::ostringstream out;
+    out << "{\"voices\":[";
+    for (size_t i = 0; i < voices.size(); ++i) {
+        if (i != 0) {
+            out << ",";
+        }
+        out << json_quote(voices[i]);
+    }
+    out << "]}";
+    return json_response(out.str());
 }
 
 std::string ServerState::models_json() const {

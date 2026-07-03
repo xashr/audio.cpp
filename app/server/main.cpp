@@ -40,6 +40,7 @@ void print_help() {
         << "Endpoints:\n"
         << "  GET  /health\n"
         << "  GET  /v1/models\n"
+        << "  GET  /v1/audio/voices?model=<id>\n"
         << "  POST /v1/audio/speech\n"
         << "  POST /v1/audio/transcriptions\n"
         << "  POST /v1/tasks/run\n";
