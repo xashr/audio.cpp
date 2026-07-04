@@ -107,6 +107,7 @@ add_library(engine_runtime STATIC
     src/framework/io/json.cpp
     src/framework/io/text.cpp
     src/framework/text/chunking.cpp
+    src/framework/text/subtitle.cpp
     src/framework/io/yaml.cpp
     src/framework/io/binary.cpp
     src/framework/io/safetensors.cpp
@@ -552,6 +553,13 @@ if (ENGINE_BUILD_TESTS)
     add_test(
         NAME audio_chunking_test
         COMMAND audio_chunking_test
+    )
+
+    add_engine_unittest(subtitle_formatter_test tests/unittests/test_subtitle_formatter.cpp)
+
+    add_test(
+        NAME subtitle_formatter_test
+        COMMAND subtitle_formatter_test
     )
 
     add_engine_unittest(rnnoise_utility_test tests/unittests/test_rnnoise_utility.cpp)
