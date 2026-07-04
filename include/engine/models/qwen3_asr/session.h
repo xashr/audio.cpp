@@ -13,6 +13,10 @@
 #include <cstddef>
 #include <memory>
 
+namespace engine::models::qwen3_forced_aligner {
+class Qwen3ForcedAlignerSession;
+}
+
 namespace engine::models::qwen3_asr {
 
 class Qwen3ASRSession final
@@ -23,6 +27,7 @@ public:
         runtime::TaskSpec task,
         runtime::SessionOptions options,
         std::shared_ptr<const Qwen3ASRAssets> assets);
+    ~Qwen3ASRSession() override;
 
     std::string family() const override;
     runtime::VoiceTaskKind task_kind() const override;
@@ -47,6 +52,7 @@ private:
     Qwen3ASRThinkerRuntime thinker_;
     Qwen3ASRPromptBuilder prompt_builder_;
     Qwen3ASRPostprocessor postprocessor_;
+    std::unique_ptr<engine::models::qwen3_forced_aligner::Qwen3ForcedAlignerSession> forced_aligner_session_;
 };
 
 }  // namespace engine::models::qwen3_asr

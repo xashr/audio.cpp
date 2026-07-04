@@ -2,8 +2,10 @@
 
 #include "engine/framework/debug/profiler.h"
 #include "engine/framework/runtime/options.h"
+#include "engine/models/qwen3_forced_aligner/session.h"
 
 #include <chrono>
+#include <filesystem>
 #include <stdexcept>
 #include <utility>
 
@@ -97,12 +99,31 @@ Qwen3ASRSession::Qwen3ASRSession(
             key != "qwen3_asr.thinker_weight_context_mb" &&
             key != "qwen3_asr.audio_encoder_weight_type" &&
             key != "qwen3_asr.thinker_weight_type" &&
-            key != "qwen3_asr.weight_type") {
+            key != "qwen3_asr.weight_type" &&
+            key != "qwen3_asr.forced_aligner_model_path" &&
+            key != "qwen3_asr.aligner_model_path") {
             throw std::runtime_error("unknown Qwen3 ASR session option: " + key);
         }
     }
+    if (const auto aligner_path = runtime::find_option(
+            options.options,
+            {"qwen3_asr.forced_aligner_model_path", "qwen3_asr.aligner_model_path"})) {
+        runtime::SessionOptions aligner_options;
+        aligner_options.backend = options.backend;
+        for (const auto & [key, value] : options.options) {
+            if (key.rfind("qwen3_forced_aligner.", 0) == 0) {
+                aligner_options.options.emplace(key, value);
+            }
+        }
+        forced_aligner_session_ = std::make_unique<engine::models::qwen3_forced_aligner::Qwen3ForcedAlignerSession>(
+            runtime::TaskSpec{runtime::VoiceTaskKind::Alignment, runtime::RunMode::Offline},
+            aligner_options,
+            load_qwen3_asr_assets(std::filesystem::path(*aligner_path)));
+    }
     assets_->model_weights->release_storage();
 }
+
+Qwen3ASRSession::~Qwen3ASRSession() = default;
 
 std::string Qwen3ASRSession::family() const {
     return "qwen3_asr";
@@ -127,6 +148,11 @@ runtime::TaskResult Qwen3ASRSession::run(const runtime::TaskRequest & request) {
     require_prepared("Qwen3 ASR run()");
     const auto wall_start = Clock::now();
     const auto asr_request = make_request(request);
+    if (asr_request.generation.return_timestamps && forced_aligner_session_ == nullptr) {
+        throw std::runtime_error(
+            "Qwen3 ASR timestamp output requires --session-option "
+            "qwen3_asr.forced_aligner_model_path=<path-to-Qwen3-ForcedAligner-0.6B>");
+    }
     const auto frontend_start = Clock::now();
     const auto features = frontend_.extract(asr_request.audio);
     const auto frontend_end = Clock::now();
@@ -146,6 +172,19 @@ runtime::TaskResult Qwen3ASRSession::run(const runtime::TaskRequest & request) {
     runtime::TaskResult result;
     result.text_output = runtime::Transcript{decoded.text, decoded.language};
     result.word_timestamps = decoded.word_timestamps;
+    if (asr_request.generation.return_timestamps) {
+        if (!decoded.text.empty()) {
+            if (decoded.language.empty()) {
+                throw std::runtime_error("Qwen3 ASR timestamp output requires a requested or detected language");
+            }
+            runtime::TaskRequest align_request;
+            align_request.audio_input = asr_request.audio;
+            align_request.text_input = runtime::Transcript{decoded.text, decoded.language};
+            forced_aligner_session_->prepare(runtime::build_preparation_request(align_request));
+            auto aligned = forced_aligner_session_->run(align_request);
+            result.word_timestamps = std::move(aligned.word_timestamps);
+        }
+    }
     const auto wall_end = Clock::now();
     debug::timing_log_scalar("qwen3_asr.frontend_ms", engine::debug::elapsed_ms(frontend_start, frontend_end));
     debug::timing_log_scalar("qwen3_asr.prompt_ms", engine::debug::elapsed_ms(prompt_start, prompt_end));

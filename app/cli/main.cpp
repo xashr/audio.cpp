@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <fstream>
 #include <filesystem>
 #include <iostream>
 #include <optional>
@@ -113,6 +114,7 @@ void print_task_list_help() {
         << "  Outputs:\n"
         << "    --out <wav>\n"
         << "    --out-dir <dir>  Write named multi-audio outputs or batch request outputs\n"
+        << "    --text-out <txt>\n"
         << "    --segments-out <json>\n"
         << "    --turns-out <json>\n"
         << "    --words-out <json>\n"
@@ -273,9 +275,28 @@ void print_model_help(const engine::runtime::ModelInspection & inspection) {
     std::cout << "  Common output options:\n"
               << "    --out <wav>\n"
               << "    --out-dir <dir>\n"
+              << "    --text-out <txt>\n"
               << "    --segments-out <json>\n"
               << "    --turns-out <json>\n"
               << "    --words-out <json>\n";
+}
+
+void write_text_output(
+    const engine::runtime::TaskResult & result,
+    const std::filesystem::path & path,
+    const std::string & label) {
+    if (!result.text_output.has_value()) {
+        throw std::runtime_error("--text-out was requested but the task result has no text output");
+    }
+    if (!path.parent_path().empty()) {
+        std::filesystem::create_directories(path.parent_path());
+    }
+    std::ofstream output(path);
+    if (!output) {
+        throw std::runtime_error("failed to open text output: " + path.string());
+    }
+    output << result.text_output->text << "\n";
+    std::cout << label << "=" << path.string() << "\n";
 }
 
 void print_task_help(const engine::runtime::ModelRegistry & registry, const std::string & task_name) {
@@ -387,6 +408,9 @@ void run_streaming(
         minitts::cli::optional_path_arg(argc, argv, "--segments-out"),
         minitts::cli::optional_path_arg(argc, argv, "--turns-out"),
         minitts::cli::optional_path_arg(argc, argv, "--words-out"));
+    if (const auto text_out = minitts::cli::optional_path_arg(argc, argv, "--text-out")) {
+        write_text_output(result, *text_out, "text_out");
+    }
 }
 
 }  // namespace
@@ -511,6 +535,8 @@ int main(int argc, char ** argv) {
         auto model = registry.load(load_request);
         auto session = model->create_task_session(task_spec, session_options);
         const auto voice_state_out = optional_path_arg(argc, argv, "--voice-state-out");
+        const auto text_out = optional_path_arg(argc, argv, "--text-out");
+        const auto words_out = optional_path_arg(argc, argv, "--words-out");
 
         if (has_batch_input(argc, argv)) {
             if (task_spec.mode != engine::runtime::RunMode::Offline) {
@@ -529,17 +555,25 @@ int main(int argc, char ** argv) {
             if (offline == nullptr) {
                 throw std::runtime_error("selected task session does not support offline execution");
             }
-            const engine::runtime::TaskRequest base_request =
+            engine::runtime::TaskRequest base_request =
                 optional_path_arg(argc, argv, "--request-sequence").has_value()
                     ? engine::runtime::TaskRequest{}
                     : build_request_from_cli(argc, argv);
-            const auto batch_request = build_batch_request_from_cli(argc, argv, base_request);
+            if (words_out.has_value()) {
+                base_request.options["return_timestamps"] = "true";
+            }
+            auto batch_request = build_batch_request_from_cli(argc, argv, base_request);
+            if (words_out.has_value()) {
+                for (auto & item : batch_request.requests) {
+                    item.request.options["return_timestamps"] = "true";
+                }
+            }
             const minitts::app::FileOutputPolicy output_policy{
                 optional_path_arg(argc, argv, "--out"),
                 optional_path_arg(argc, argv, "--out-dir"),
                 optional_path_arg(argc, argv, "--segments-out"),
                 optional_path_arg(argc, argv, "--turns-out"),
-                optional_path_arg(argc, argv, "--words-out"),
+                words_out,
                 optional_path_arg(argc, argv, "--batch-manifest-out"),
             };
             std::cout << "family=" << session->family() << "\n";
@@ -552,12 +586,21 @@ int main(int argc, char ** argv) {
                 merge_mode,
                 [&](size_t index, const minitts::app::AppRequestResult & item) {
                     minitts::app::emit_batch_item_result(index, item, output_policy);
+                    if (text_out.has_value()) {
+                        const auto request_id = minitts::app::safe_output_name(item.id);
+                        const auto path = text_out->parent_path() /
+                                          (text_out->stem().string() + "_" + request_id + text_out->extension().string());
+                        write_text_output(item.result, path, "text_out[" + request_id + "]");
+                    }
                 });
             minitts::app::emit_batch_summary(batch_result, output_policy);
             return 0;
         }
 
         auto request = build_request_from_cli(argc, argv);
+        if (words_out.has_value()) {
+            request.options["return_timestamps"] = "true";
+        }
         if (voice_state_out.has_value()) {
             if (session->family() != "pocket_tts") {
                 throw std::runtime_error("--voice-state-out is only supported by PocketTTS");
@@ -590,7 +633,10 @@ int main(int argc, char ** argv) {
                 optional_path_arg(argc, argv, "--out-dir"),
                 optional_path_arg(argc, argv, "--segments-out"),
                 optional_path_arg(argc, argv, "--turns-out"),
-                optional_path_arg(argc, argv, "--words-out"));
+                words_out);
+            if (text_out.has_value()) {
+                write_text_output(result, *text_out, "text_out");
+            }
             return 0;
         }
 
