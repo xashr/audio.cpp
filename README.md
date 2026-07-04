@@ -6,7 +6,7 @@ Tired of juggling a dozen Conda environments, hundreds of Python packages, and d
 
 > [!IMPORTANT]
 > **CUDA performance headline:** multiple TTS paths already run **1.8x-5.0x faster than their Python reference paths** while cutting end-to-end latency by **45%-80%**.
-> **VibeVoice 1.5B:** generates a **90-minute podcast in 22 minutes** with **10 diffusion steps** and without quantization, runs about **4x faster than real time**, and is **2.8x faster than Python**.
+> **VibeVoice 1.5B:** generates a **93.9-minute podcast in 18.2 minutes** with **10 diffusion steps** and without quantization, running about **5.15x faster than real time**.
 
 It is built for real end-to-end execution rather than one-off model demos: the same runtime powers TTS, voice cloning, voice conversion, ASR, diarization, VAD, source separation, alignment, codec-style models, and higher-level workflows through a common framework surface.
 
@@ -28,16 +28,14 @@ Highlights:
 ## News
 
 > [!IMPORTANT]
-> **2026-07-02:** Music generation and source separation expanded in the released framework surface: ACE-Step 1.5 Turbo/Base, HeartMuLa, Stable Audio 3 Small Music/SFX and Medium, Mel-Band RoFormer, and HTDemucs are now available through the normal audio.cpp CLI/framework paths.
->
-> **2026-07-02:** VibeVoice 7B joins the 1.5B model, and full fine-tune adapters — language-model LoRA plus fine-tuned diffusion head and acoustic/semantic connectors — can now be merged at load time through `--load-option vibevoice.lora`.
+> **2026-07-03:** Conv1DTransp module CUDA optimization: VibeVoice reaches **5.15x realtime** on **93.9-minute long-form generation**. Overall, VibeVoice inference time was reduced by **73.17%**, PocketTTS by **35.32%**, Chatterbox by **33.56%**, Qwen3-TTS by **30.60%**, HeartMuLa by **17.03%**, and VoxCPM2 by **14.7%** compared with the previous release.
 
 > [!IMPORTANT]
-> **2026-06-30:** VibeVoice 1.5B is now released in the framework, bringing long-form, multi-speaker dialogue TTS into the normal audio.cpp model surface.
+> **2026-07-02:** Music generation and source separation expanded in the released framework surface: ACE-Step 1.5 Turbo/Base, HeartMuLa, Stable Audio 3 Small Music/SFX and Medium, Mel-Band RoFormer, and HTDemucs are now available through the normal audio.cpp CLI/framework paths.
 
-> [!TIP]
-> **2026-06-30:** More detailed usage documentation is now available in [docs/usage.md](docs/usage.md), covering model setup, CLI usage, server usage, and common workflows.
-
+- **2026-07-02:** VibeVoice 7B joins the 1.5B model, and full fine-tune adapters — language-model LoRA plus fine-tuned diffusion head and acoustic/semantic connectors — can now be merged at load time through `--load-option vibevoice.lora`.
+- **2026-06-30:** VibeVoice 1.5B is now released in the framework, bringing long-form, multi-speaker dialogue TTS into the normal audio.cpp model surface.
+- **2026-06-30:** More detailed usage documentation is now available in [docs/usage.md](docs/usage.md), covering model setup, CLI usage, server usage, and common workflows.
 - **2026-06-26:** The speech intelligence side grew with released Citrinet ASR, MarbleNet VAD, and Sortformer diarization paths.
 - **2026-06-25:** The first release wave landed with TTS, voice cloning, voice conversion, alignment, VAD, codec, and multilingual generation support across Chatterbox, MioCodec, MioTTS, OmniVoice, PocketTTS, Qwen3, SeedVC, Silero VAD, Vevo2, and VoxCPM2.
 
@@ -573,6 +571,9 @@ The main app-facing test tooling under `tools/` is `tools/audiocpp_cli/run_audio
 The Python-reference side of these tests usually requires more time-consuming setup than the C++ path because different models rely on different Python reference repos and dependency stacks. In practice, the framework-side tooling is fast to iterate on once models are installed, while Python parity runs often need extra environment preparation before they are ready.
 
 ## Performance Metrics
+
+> [!WARNING]
+> These Python-relative numbers were measured for the initial release. Several model paths have improved substantially since then, so the figures below should be read as the original release baseline rather than the latest peak performance.
 
 All performance metrics in this section were measured on Ubuntu with the CUDA backend on an NVIDIA GeForce RTX 5090. The Python-relative one-shot and long-lived-session comparisons come from direct framework/runtime API benchmark calls, not from `audiocpp_cli`; CLI path tests are separate and include app-layer request parsing, output writing, and other user-facing overhead.
 

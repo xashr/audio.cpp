@@ -2,12 +2,14 @@
 
 #include "engine/framework/audio/wav_reader.h"
 #include "engine/framework/assets/tensor_source.h"
+#include "engine/framework/debug/profiler.h"
 #include "engine/framework/debug/trace.h"
 #include "engine/framework/runtime/options.h"
 #include "engine/models/vibevoice/lora.h"
 
 #include <algorithm>
 #include <cctype>
+#include <chrono>
 #include <filesystem>
 #include <stdexcept>
 #include <string>
@@ -16,6 +18,8 @@
 
 namespace engine::models::vibevoice {
 namespace {
+
+using Clock = std::chrono::steady_clock;
 
 constexpr size_t kMaxReferenceVoiceStates = 4;
 constexpr int64_t kCudaVoicePromptMaxSeconds = 30;
@@ -268,6 +272,7 @@ void VibeVoiceSession::prepare(const runtime::SessionPreparationRequest & reques
 
 runtime::TaskResult VibeVoiceSession::run(const runtime::TaskRequest & request) {
     require_prepared("VibeVoice run");
+    const auto wall_start = Clock::now();
     auto vibevoice_request = make_request(request);
     auto result = generate_vibevoice(
         vibevoice_request,
@@ -280,6 +285,7 @@ runtime::TaskResult VibeVoiceSession::run(const runtime::TaskRequest & request) 
         negative_decoder_cache_);
     runtime::TaskResult out;
     out.audio_output = std::move(result.audio);
+    engine::debug::timing_log_scalar("session.wall_ms", engine::debug::elapsed_ms(wall_start));
     return out;
 }
 

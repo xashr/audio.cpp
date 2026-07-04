@@ -611,6 +611,13 @@ if (ENGINE_BUILD_TESTS)
         COMMAND encoder_module_test
     )
 
+    add_engine_unittest(conv_transpose_fast_path_test tests/unittests/test_conv_transpose_fast_path.cpp)
+
+    add_test(
+        NAME conv_transpose_fast_path_test
+        COMMAND conv_transpose_fast_path_test
+    )
+
     add_executable(server_multipart_test
         tests/unittests/test_server_multipart.cpp
         app/server/multipart.cpp

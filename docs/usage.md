@@ -78,3 +78,4 @@ Omit these unless you need explicit control. If `--seed` is omitted, models that
 | Qwen3 TTS, ASR, forced alignment | [qwen3.md](qwen3.md) |
 | ASR, VAD, diarization | [speech_analysis.md](speech_analysis.md) |
 | Voice conversion codec and source separation | [audio_tools.md](audio_tools.md) |
+| Framework module optimization notes | [module_optimizations.md](module_optimizations.md) |
