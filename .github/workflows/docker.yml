@@ -9,6 +9,7 @@
 name: Publish Docker image
 
 on:
+  workflow_dispatch:  # remove after testing
   schedule:
     - cron: '12 4 * * *'
 
