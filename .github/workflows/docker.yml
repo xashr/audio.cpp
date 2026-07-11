@@ -124,6 +124,8 @@ jobs:
             BUILD_DATE=${{ needs.metadata.outputs.build_date }}
             APP_VERSION=${{ github.sha }}
             APP_REVISION=${{ github.sha }}
+            IMAGE_URL=${{ github.server_url }}/${{ github.repository }}
+            IMAGE_SOURCE=${{ github.server_url }}/${{ github.repository }}
             ${{ matrix.cuda_version && format('CUDA_VERSION={0}', matrix.cuda_version) || '' }}
           cache-from: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.arch }}-${{ matrix.tag }}
           cache-to: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.arch }}-${{ matrix.tag }},mode=max
@@ -186,16 +188,20 @@ jobs:
           repo="ghcr.io/${{ env.IMAGE_REPO }}"
           sha="${{ needs.metadata.outputs.short_sha }}"
           tag="${{ matrix.tag }}"
+          build_date="${{ needs.metadata.outputs.build_date }}"
+          image_url="${{ github.server_url }}/${{ github.repository }}"
 
           mutable="full-${tag}"
           immutable="full-${tag}-${sha}"
 
           # Collect per-arch digests
+          expected_arches=(amd64 arm64)
           refs=()
-          for arch in amd64 arm64; do
+          missing=()
+          for arch in "${expected_arches[@]}"; do
             file="/tmp/digests/${tag}-${arch}.txt"
             if [ ! -f "$file" ]; then
-              echo "  No digest for ${tag}/${arch} (skipped)"
+              missing+=("$arch")
               continue
             fi
             digest="$(cat "$file")"
@@ -208,20 +214,29 @@ jobs:
             refs+=("${repo}@${digest}")
           done
 
+          # Zero digests → tag was intentionally skipped (skip: true), exit cleanly
           if [ ${#refs[@]} -eq 0 ]; then
             echo "No digests found for ${tag}, skipping"
             exit 0
           fi
 
-          # Only create mutable tag when both arches are present.
-          if [ ${#refs[@]} -eq 1 ]; then
-            echo "Single arch only — skipping mutable tag ${mutable}"
-            echo "  → ${immutable} (single arch)"
-            docker buildx imagetools create --tag "${repo}:${immutable}" "${refs[@]}"
-          else
-            echo "  → ${mutable} (${#refs[@]} arches)"
-            docker buildx imagetools create --tag "${repo}:${mutable}" "${refs[@]}"
-
-            echo "  → ${immutable} (${#refs[@]} arches)"
-            docker buildx imagetools create --tag "${repo}:${immutable}" "${refs[@]}"
+          # Some but not all → a build failed; fail loudly so it's visible in CI
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing digests for ${tag}: ${missing[*]}"
+            echo "  Partial failure — mutable tag may be stale"
+            exit 1
           fi
+
+          # OCI annotations for the merged manifest
+          annotations=(
+            --annotation "index:org.opencontainers.image.created=${build_date}"
+            --annotation "index:org.opencontainers.image.revision=${{ github.sha }}"
+            --annotation "index:org.opencontainers.image.url=${image_url}"
+            --annotation "index:org.opencontainers.image.source=${image_url}"
+          )
+
+          echo "  → ${mutable} (${#refs[@]} arches)"
+          docker buildx imagetools create "${annotations[@]}" --tag "${repo}:${mutable}" "${refs[@]}"
+
+          echo "  → ${immutable} (${#refs[@]} arches)"
+          docker buildx imagetools create "${annotations[@]}" --tag "${repo}:${immutable}" "${refs[@]}"

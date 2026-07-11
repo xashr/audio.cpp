@@ -63,8 +63,8 @@ FROM ${BASE_CUDA_RUN_CONTAINER} AS base
 ARG BUILD_DATE=N/A
 ARG APP_VERSION=N/A
 ARG APP_REVISION=N/A
-ARG IMAGE_URL=https://github.com/0xShug0/audio.cpp
-ARG IMAGE_SOURCE=https://github.com/0xShug0/audio.cpp
+ARG IMAGE_URL=N/A
+ARG IMAGE_SOURCE=N/A
 
 LABEL org.opencontainers.image.created=$BUILD_DATE \
       org.opencontainers.image.version=$APP_VERSION \
