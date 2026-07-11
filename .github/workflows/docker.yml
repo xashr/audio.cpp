@@ -8,12 +8,12 @@
 #   full-cuda13       (latest, mutable)
 #   full-cuda13-<sha> (pinned to commit, immutable)
 
-name: Publish Docker image
+name: Build and publish Docker images
 
 on:
-  workflow_dispatch:  # remove after testing
   schedule:
     - cron: '12 4 * * *'
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
