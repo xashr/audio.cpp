@@ -52,15 +52,18 @@ jobs:
           - tag: cpu
             dockerfile: .devops/cpu.Dockerfile
             platforms: linux/amd64
+            arch: amd64
             runs_on: ubuntu-24.04
           - tag: cpu
             dockerfile: .devops/cpu.Dockerfile
             platforms: linux/arm64
+            arch: arm64
             runs_on: ubuntu-24.04-arm
           # ── CUDA 12 (uncomment skip: false to enable) ──
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/amd64
+            arch: amd64
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "12.9.0"
@@ -68,6 +71,7 @@ jobs:
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
+            arch: arm64
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "12.9.0"
@@ -121,8 +125,8 @@ jobs:
             APP_VERSION=${{ github.sha }}
             APP_REVISION=${{ github.sha }}
             ${{ matrix.cuda_version && format('CUDA_VERSION={0}', matrix.cuda_version) || '' }}
-          cache-from: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.platforms }}-${{ matrix.tag }}
-          cache-to: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.platforms }}-${{ matrix.tag }},mode=max
+          cache-from: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.arch }}-${{ matrix.tag }}
+          cache-to: type=registry,ref=ghcr.io/${{ env.IMAGE_REPO }}:cache-${{ matrix.arch }}-${{ matrix.tag }},mode=max
 
       - name: Upload digest
         if: ${{ matrix.skip != true }}
