@@ -2,11 +2,11 @@
 #
 # Produces multi-arch images on ghcr.io:
 #   full-cpu          (latest, mutable)
-#   full-cpu-<sha>    (pinned to commit, immutable)
+#   full-cpu-YYYYMMDD (pinned to date, immutable)
 #   full-cuda12       (latest, mutable)
-#   full-cuda12-<sha> (pinned to commit, immutable)
+#   full-cuda12-YYYYMMDD (pinned to date, immutable)
 #   full-cuda13       (latest, mutable)
-#   full-cuda13-<sha> (pinned to commit, immutable)
+#   full-cuda13-YYYYMMDD (pinned to date, immutable)
 
 name: Build and publish Docker images
 
@@ -32,14 +32,13 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       build_date: ${{ steps.date.outputs.date }}
-      short_sha: ${{ steps.sha.outputs.short_sha }}
+      date_tag: ${{ steps.date.outputs.tag }}
     steps:
       - name: Get build date
         id: date
-        run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
-      - name: Compute short SHA
-        id: sha
-        run: echo "short_sha=${GITHUB_SHA:0:8}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
+          echo "tag=$(date -u +'%Y%m%d')" >> "$GITHUB_OUTPUT"
 
   # ── Build each arch, push by digest ────────────────────────────────────
   build:
@@ -207,13 +206,13 @@ jobs:
           set -euo pipefail
 
           repo="ghcr.io/${{ env.IMAGE_REPO }}"
-          sha="${{ needs.metadata.outputs.short_sha }}"
+          date_tag="${{ needs.metadata.outputs.date_tag }}"
           tag="${{ matrix.tag }}"
           build_date="${{ needs.metadata.outputs.build_date }}"
           image_url="${{ github.server_url }}/${{ github.repository }}"
 
           mutable="full-${tag}"
-          immutable="full-${tag}-${sha}"
+          immutable="full-${tag}-${date_tag}"
 
           # Collect per-arch digests
           expected_arches=(amd64 arm64)
