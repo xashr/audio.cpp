@@ -7,7 +7,7 @@
 # [BUILD] Compile all release binaries with CUDA
 # ============================================================
 ARG UBUNTU_VERSION=24.04
-ARG CUDA_VERSION=12.9.0
+ARG CUDA_VERSION=12.9.2
 ARG BUILD_DATE=N/A
 ARG APP_VERSION=N/A
 ARG APP_REVISION=N/A

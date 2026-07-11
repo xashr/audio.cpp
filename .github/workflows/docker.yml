@@ -5,6 +5,8 @@
 #   full-cpu-<sha>    (pinned to commit, immutable)
 #   full-cuda12       (latest, mutable)
 #   full-cuda12-<sha> (pinned to commit, immutable)
+#   full-cuda13       (latest, mutable)
+#   full-cuda13-<sha> (pinned to commit, immutable)
 
 name: Publish Docker image
 
@@ -68,7 +70,7 @@ jobs:
             arch: amd64
             runs_on: ubuntu-24.04
             free_disk: true
-            cuda_version: "12.9.0"
+            cuda_version: "12.9.2"
             skip: false
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
@@ -76,7 +78,24 @@ jobs:
             arch: arm64
             runs_on: ubuntu-24.04-arm
             free_disk: true
-            cuda_version: "12.9.0"
+            cuda_version: "12.9.2"
+            skip: false
+          # ── CUDA 13 ──
+          - tag: cuda13
+            dockerfile: .devops/cuda.Dockerfile
+            platforms: linux/amd64
+            arch: amd64
+            runs_on: ubuntu-24.04
+            free_disk: true
+            cuda_version: "13.3.0"
+            skip: false
+          - tag: cuda13
+            dockerfile: .devops/cuda.Dockerfile
+            platforms: linux/arm64
+            arch: arm64
+            runs_on: ubuntu-24.04-arm
+            free_disk: true
+            cuda_version: "13.3.0"
             skip: false
     steps:
       - name: Skip when requested
@@ -163,7 +182,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        tag: [cpu, cuda12]
+        tag: [cpu, cuda12, cuda13]
     steps:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
