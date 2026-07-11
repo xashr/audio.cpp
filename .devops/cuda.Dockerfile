@@ -95,8 +95,5 @@ COPY --from=build /app/full /app
 
 USER ubuntu
 
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
-  CMD curl -f http://localhost:8080/health || exit 1
-
 ENTRYPOINT ["/app/entrypoint.sh"]
 
