@@ -3,9 +3,7 @@
 # Usage:
 #   docker build -f .devops/cuda.Dockerfile -t local/audiocpp:full-cuda .
 
-# ============================================================
-# [BUILD] Compile all release binaries with CUDA
-# ============================================================
+# ── BUILD: Compile all release binaries with CUDA ─────────────────────────────
 ARG UBUNTU_VERSION=24.04
 ARG CUDA_VERSION=12.9.2
 ARG BUILD_DATE=N/A
@@ -32,7 +30,7 @@ ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION} CUDAHOSTCXX=g++-${GCC_VERSION}
 WORKDIR /app
 COPY . .
 
-# Configure
+# Configure and build
 RUN cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DENGINE_ENABLE_CUDA=ON \
@@ -56,9 +54,7 @@ RUN mkdir -p /app/full && \
     cp .devops/entrypoint.sh /app/full/entrypoint.sh && \
     chmod +x /app/full/entrypoint.sh
 
-# ============================================================
-# [BASE] Shared runtime (NVIDIA CUDA + common libs)
-# ============================================================
+# ── BASE: Shared runtime (NVIDIA CUDA + common libs) ──────────────────────────
 FROM ${BASE_CUDA_RUN_CONTAINER} AS base
 
 ARG BUILD_DATE=N/A
@@ -87,9 +83,7 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ============================================================
-# [FULL] All binaries + entrypoint.sh multiplexer
-# ============================================================
+# ── FULL: All binaries + entrypoint.sh multiplexer ────────────────────────────
 FROM base AS full
 
 COPY --from=build /app/full /app
@@ -97,4 +91,3 @@ COPY --from=build /app/full /app
 USER ubuntu
 
 ENTRYPOINT ["/app/entrypoint.sh"]
-

@@ -32,7 +32,7 @@ env:
   IMAGE_REPO: ${{ github.repository }}
 
 jobs:
-  # ── Check for new commits ──────────────────────────────────────────────
+  # ── Check for new commits ───────────────────────────────────────────────────
   check-commits:
     name: Check for new commits
     runs-on: ubuntu-24.04
@@ -72,7 +72,7 @@ jobs:
             fi
           fi
 
-  # ── Shared metadata (date computed once for all jobs) ───────────────────
+  # ── Shared metadata (date computed once for all jobs) ───────────────────────
   metadata:
     name: Generate metadata
     needs: check-commits
@@ -88,7 +88,7 @@ jobs:
           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "tag=$(date -u +'%Y%m%d')" >> "$GITHUB_OUTPUT"
 
-  # ── Build each arch, push by digest ────────────────────────────────────
+  # ── Build each arch, push by digest ─────────────────────────────────────────
   build:
     name: Build (${{ matrix.tag }}, ${{ matrix.platforms }})
     needs: [check-commits, metadata]
@@ -222,7 +222,7 @@ jobs:
           path: /tmp/digests/
           if-no-files-found: error
 
-  # ── Merge per-arch digests into multi-arch manifests ───────────────────
+  # ── Merge per-arch digests into multi-arch manifests ────────────────────────
   merge:
     name: Merge (${{ matrix.tag }})
     needs: [check-commits, metadata, build]
@@ -312,7 +312,7 @@ jobs:
           echo "  → ${immutable} (${#refs[@]} arches)"
           docker buildx imagetools create "${annotations[@]}" --tag "${repo}:${immutable}" "${refs[@]}"
 
-  # ── Update last-docker-build tag ──────────────────────────────────────
+  # ── Update last-docker-build tag ────────────────────────────────────────────
   update-tag:
     name: Update build tag
     needs: [check-commits, merge]
