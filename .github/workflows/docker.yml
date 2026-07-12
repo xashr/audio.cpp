@@ -41,7 +41,7 @@ jobs:
       short_sha:  ${{ steps.check.outputs.short_sha }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
 
@@ -152,7 +152,7 @@ jobs:
 
       - name: Checkout
         if: ${{ matrix.enabled == true }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         if: ${{ matrix.enabled == true }}
@@ -181,7 +181,7 @@ jobs:
       - name: Build and push
         id: push
         if: ${{ matrix.enabled == true }}
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ${{ matrix.dockerfile }}
@@ -216,7 +216,7 @@ jobs:
 
       - name: Save digest artifact
         if: ${{ matrix.enabled == true }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: digest-${{ matrix.arch }}-${{ matrix.tag }}
           path: /tmp/digests/
@@ -244,7 +244,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Download digests
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: digest-*
           path: /tmp/digests
@@ -320,7 +320,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Update last-docker-build tag
         run: |
