@@ -34,7 +34,7 @@ env:
 jobs:
   # ── Check for new commits ──────────────────────────────────────────────
   check-commits:
-    name: Check commits
+    name: Check for new commits
     runs-on: ubuntu-24.04
     outputs:
       skip_build: ${{ steps.check.outputs.skip }}
@@ -74,7 +74,7 @@ jobs:
 
   # ── Shared metadata (date computed once for all jobs) ───────────────────
   metadata:
-    name: Metadata
+    name: Generate metadata
     needs: check-commits
     if: ${{ needs.check-commits.outputs.skip_build != 'true' }}
     runs-on: ubuntu-24.04
@@ -90,7 +90,7 @@ jobs:
 
   # ── Build each arch, push by digest ────────────────────────────────────
   build:
-    name: ${{ matrix.tag }} (${{ matrix.platforms }})
+    name: Build (${{ matrix.tag }}, ${{ matrix.platforms }})
     needs: [check-commits, metadata]
     if: ${{ needs.check-commits.outputs.skip_build != 'true' }}
     runs-on: ${{ matrix.runs_on }}
@@ -224,7 +224,7 @@ jobs:
 
   # ── Merge per-arch digests into multi-arch manifests ───────────────────
   merge:
-    name: Merge ${{ matrix.tag }}
+    name: Merge (${{ matrix.tag }})
     needs: [check-commits, metadata, build]
     if: ${{ needs.check-commits.outputs.skip_build != 'true' }}
     runs-on: ubuntu-24.04
@@ -314,7 +314,7 @@ jobs:
 
   # ── Update last-docker-build tag ──────────────────────────────────────
   update-tag:
-    name: Update last-docker-build tag
+    name: Update build tag
     needs: [check-commits, merge]
     if: ${{ needs.check-commits.outputs.skip_build != 'true' }}
     runs-on: ubuntu-24.04
