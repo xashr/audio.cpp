@@ -55,13 +55,13 @@ jobs:
             platforms: linux/amd64
             arch: amd64
             runs_on: ubuntu-24.04
-            skip: true
+            skip: false
           - tag: cpu
             dockerfile: .devops/cpu.Dockerfile
             platforms: linux/arm64
             arch: arm64
             runs_on: ubuntu-24.04-arm
-            skip: true
+            skip: false
           # ── CUDA 12 ──
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
@@ -70,7 +70,7 @@ jobs:
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "12.9.2"
-            skip: false
+            skip: true
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
@@ -78,7 +78,7 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "12.9.2"
-            skip: false
+            skip: true
           # ── CUDA 13 ──
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
@@ -87,7 +87,7 @@ jobs:
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "13.3.0"
-            skip: false
+            skip: true
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
@@ -95,7 +95,7 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "13.3.0"
-            skip: false
+            skip: true
     steps:
       - name: Skip when requested
         if: ${{ matrix.skip == true }}
