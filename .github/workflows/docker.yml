@@ -12,8 +12,13 @@ name: Build and publish Docker images
 
 on:
   schedule:
-    - cron: '10,40 * * * *'
+    - cron: '12 4 * * *'
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no new commits'
+        type: boolean
+        default: true
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
@@ -46,8 +51,8 @@ jobs:
           SHORT_SHA=$(git rev-parse --short=7 HEAD)
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "Manual trigger — building"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.force_build }}" == 'true' ]]; then
+            echo "Manual trigger (force_build=true) — building"
             echo "skip=false" >> "$GITHUB_OUTPUT"
           else
             LAST_TAG=$(git tag -l 'last-docker-build' | head -1)
