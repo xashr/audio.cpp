@@ -227,7 +227,10 @@ jobs:
   merge:
     name: Merge (${{ matrix.tag }})
     needs: [check-commits, metadata, build]
-    if: ${{ needs.check-commits.outputs.skip_build != 'true' }}
+    # Merge will only run if there was actually a new commit to act on and
+    # if all build jobs succeeded. As soon as one build fails, we won't
+    # produce any merged images.
+    if: ${{ needs.check-commits.outputs.skip_build != 'true' && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -266,37 +269,22 @@ jobs:
           mutable="full-${tag}"
           immutable="full-${tag}-${date_tag}-${short_sha}"
 
-          # Collect per-arch digests
+          # Collect per-arch digests.
+          # Because this job is gated on needs.build.result == 'success', a missing
+          # digest can only mean the variant was intentionally disabled (enabled: false).
           expected_arches=(amd64 arm64)
           refs=()
-          missing=()
           for arch in "${expected_arches[@]}"; do
             file="/tmp/digests/${tag}-${arch}.txt"
-            if [ ! -f "$file" ]; then
-              missing+=("$arch")
-              continue
-            fi
-            digest="$(cat "$file")"
-
-            if [[ "$digest" != sha256:* ]]; then
-              echo "::error::Invalid digest in ${file}: $digest"
-              exit 1
-            fi
-
-            refs+=("${repo}@${digest}")
+            [ -f "$file" ] || continue
+            refs+=("${repo}@$(cat "$file")")
           done
 
-          # Zero digests → variant was disabled, exit cleanly
-          if [ ${#refs[@]} -eq 0 ]; then
-            echo "No digests found for ${tag}, skipping"
-            exit 0
-          fi
+          echo "${tag}: ${#refs[@]}/${#expected_arches[@]} digests merged"
 
-          # Some but not all → a build failed; fail loudly so it's visible in CI
-          if [ ${#missing[@]} -gt 0 ]; then
-            echo "::error::Missing digests for ${tag}: ${missing[*]}"
-            echo "  Partial failure — mutable tag may be stale"
-            exit 1
+          if [ ${#refs[@]} -eq 0 ]; then
+            echo "  → skipping (all variants disabled)"
+            exit 0
           fi
 
           # OCI annotations for the merged manifest
@@ -307,10 +295,10 @@ jobs:
             --annotation "index:org.opencontainers.image.source=${image_url}"
           )
 
-          echo "  → ${mutable} (${#refs[@]} arches)"
+          echo "  → ${mutable}"
           docker buildx imagetools create "${annotations[@]}" --tag "${repo}:${mutable}" "${refs[@]}"
 
-          echo "  → ${immutable} (${#refs[@]} arches)"
+          echo "  → ${immutable}"
           docker buildx imagetools create "${annotations[@]}" --tag "${repo}:${immutable}" "${refs[@]}"
 
   # ── Update last-docker-build tag ────────────────────────────────────────────
