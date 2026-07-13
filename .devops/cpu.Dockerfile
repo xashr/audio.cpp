@@ -3,9 +3,7 @@
 # Usage:
 #   docker build -f .devops/cpu.Dockerfile -t local/audiocpp:full-cpu .
 
-# ============================================================
-# [BUILD] Compile all release binaries
-# ============================================================
+# ── BUILD: Compile all release binaries ───────────────────────────────────────
 ARG UBUNTU_VERSION=24.04
 ARG BUILD_DATE=N/A
 ARG APP_VERSION=N/A
@@ -28,12 +26,13 @@ ENV CC=gcc-${GCC_VERSION} CXX=g++-${GCC_VERSION}
 WORKDIR /app
 COPY . .
 
-# Configure
+# Configure and build
 RUN cmake -S . -B build \
         -DCMAKE_BUILD_TYPE=Release \
         -DENGINE_ENABLE_CUDA=OFF \
         -DENGINE_ENABLE_VULKAN=OFF \
         -DENGINE_ENABLE_OPENMP=ON \
+        -DENGINE_ENABLE_NATIVE_CPU=OFF \
         -DENGINE_BUILD_EXAMPLES=OFF \
         -DENGINE_BUILD_TESTS=OFF \
         -DENGINE_BUILD_WARMBENCH=OFF && \
@@ -50,16 +49,14 @@ RUN mkdir -p /app/full && \
     cp .devops/entrypoint.sh /app/full/entrypoint.sh && \
     chmod +x /app/full/entrypoint.sh
 
-# ============================================================
-# [BASE] Shared runtime (OS + common libs)
-# ============================================================
+# ── BASE: Shared runtime (OS + common libs) ───────────────────────────────────
 FROM docker.io/ubuntu:$UBUNTU_VERSION AS base
 
 ARG BUILD_DATE=N/A
 ARG APP_VERSION=N/A
 ARG APP_REVISION=N/A
-ARG IMAGE_URL=https://github.com/0xShug0/audio.cpp
-ARG IMAGE_SOURCE=https://github.com/0xShug0/audio.cpp
+ARG IMAGE_URL=N/A
+ARG IMAGE_SOURCE=N/A
 
 LABEL org.opencontainers.image.created=$BUILD_DATE \
       org.opencontainers.image.version=$APP_VERSION \
@@ -81,16 +78,11 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# ============================================================
-# [FULL] All binaries + entrypoint.sh multiplexer
-# ============================================================
+# ── FULL: All binaries + entrypoint.sh multiplexer ────────────────────────────
 FROM base AS full
 
 COPY --from=build /app/full /app
 
 USER ubuntu
-
-HEALTHCHECK --interval=30s --timeout=10s --retries=3 --start-period=15s \
-  CMD curl -f http://localhost:8080/health || exit 1
 
 ENTRYPOINT ["/app/entrypoint.sh"]
