@@ -1,18 +1,18 @@
 # audio.cpp — Build and publish Docker images
 #
-# Produces multi-arch images on ghcr.io:
-#   full-cpu                    (latest, mutable)
-#   full-cpu-YYYYMMDD-HHHHHHH  (pinned to date + short SHA, immutable)
-#   full-cuda12                 (latest, mutable)
+# Produces multi-arch (amd64, arm64) images on ghcr.io:
+#   full-cpu                     (latest, mutable)
+#   full-cpu-YYYYMMDD-HHHHHHH    (pinned to date + short SHA, immutable)
+#   full-cuda12                  (latest, mutable)
 #   full-cuda12-YYYYMMDD-HHHHHHH (pinned to date + short SHA, immutable)
-#   full-cuda13                 (latest, mutable)
+#   full-cuda13                  (latest, mutable)
 #   full-cuda13-YYYYMMDD-HHHHHHH (pinned to date + short SHA, immutable)
 
 name: Build and publish Docker images
 
 on:
   schedule:
-    - cron: '12 4 * * *'
+    - cron: '22 2 * * *'
   workflow_dispatch:
     inputs:
       force_build:
