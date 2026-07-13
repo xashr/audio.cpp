@@ -137,7 +137,7 @@ jobs:
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "13.3.0"
-            enabled: yes
+            enabled: true
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
@@ -145,7 +145,7 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "13.3.0"
-            enabled: yes
+            enabled: true
     steps:
       - name: Skip when not enabled
         if: ${{ matrix.enabled != true }}
