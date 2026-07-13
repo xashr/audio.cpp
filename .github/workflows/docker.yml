@@ -120,7 +120,7 @@ jobs:
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "12.9.2"
-            enabled: false
+            enabled: true
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
@@ -128,7 +128,7 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "12.9.2"
-            enabled: false
+            enabled: true
           # ── CUDA 13 ──
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
