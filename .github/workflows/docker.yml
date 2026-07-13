@@ -99,7 +99,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── CPU ── (arm64 intentionally failing for testing)
+          # ── CPU ──
           - tag: cpu
             dockerfile: .devops/cpu.Dockerfile
             platforms: linux/amd64
@@ -112,8 +112,7 @@ jobs:
             arch: arm64
             runs_on: ubuntu-24.04-arm
             enabled: true
-            test_error: true
-          # ── CUDA 12 ── (arm64 disabled for testing)
+          # ── CUDA 12 ──
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/amd64
@@ -129,8 +128,8 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "12.9.2"
-            enabled: false
-          # ── CUDA 13 ── (disabled for testing)
+            enabled: true
+          # ── CUDA 13 ──
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/amd64
@@ -138,7 +137,7 @@ jobs:
             runs_on: ubuntu-24.04
             free_disk: true
             cuda_version: "13.3.0"
-            enabled: false
+            enabled: true
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
@@ -146,7 +145,7 @@ jobs:
             runs_on: ubuntu-24.04-arm
             free_disk: true
             cuda_version: "13.3.0"
-            enabled: false
+            enabled: true
     steps:
       - name: Skip when not enabled
         if: ${{ matrix.enabled != true }}
@@ -155,10 +154,6 @@ jobs:
       - name: Checkout
         if: ${{ matrix.enabled == true }}
         uses: actions/checkout@v5
-
-      - name: Inject test error
-        if: ${{ matrix.test_error == true }}
-        run: echo "::error::Simulated build failure for ${{ matrix.tag }}-${{ matrix.arch }}" && exit 1
 
       - name: Set up Docker Buildx
         if: ${{ matrix.enabled == true }}
