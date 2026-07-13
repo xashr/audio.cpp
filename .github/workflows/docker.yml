@@ -99,7 +99,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # ── CPU ──
+          # ── CPU ── (arm64 intentionally failing for testing)
           - tag: cpu
             dockerfile: .devops/cpu.Dockerfile
             platforms: linux/amd64
@@ -112,6 +112,7 @@ jobs:
             arch: arm64
             runs_on: ubuntu-24.04-arm
             enabled: true
+            test_error: true
           # ── CUDA 12 ── (arm64 disabled for testing)
           - tag: cuda12
             dockerfile: .devops/cuda.Dockerfile
@@ -154,6 +155,10 @@ jobs:
       - name: Checkout
         if: ${{ matrix.enabled == true }}
         uses: actions/checkout@v5
+
+      - name: Inject test error
+        if: ${{ matrix.test_error == true }}
+        run: echo "::error::Simulated build failure for ${{ matrix.tag }}-${{ matrix.arch }}" && exit 1
 
       - name: Set up Docker Buildx
         if: ${{ matrix.enabled == true }}
