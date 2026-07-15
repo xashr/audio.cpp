@@ -585,7 +585,7 @@ if (ENGINE_ENABLE_OPENMP)
 endif()
 
 add_executable(audiocpp_gguf
-    tools/gguf_convert.cpp
+    app/gguf/main.cpp
 )
 target_link_libraries(audiocpp_gguf PRIVATE engine_runtime ggml)
 target_include_directories(audiocpp_gguf PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
