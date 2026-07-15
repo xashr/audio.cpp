@@ -4,9 +4,46 @@
 #include <fstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
+#include <streambuf>
 
 namespace engine::audio {
 namespace {
+
+class MemoryStreamBuffer : public std::streambuf {
+public:
+    explicit MemoryStreamBuffer(std::string_view data) {
+        auto * begin = const_cast<char *>(data.data());
+        setg(begin, begin, begin + data.size());
+    }
+
+protected:
+    pos_type seekoff(off_type offset, std::ios_base::seekdir dir, std::ios_base::openmode which) override {
+        if ((which & std::ios_base::in) == 0) {
+            return pos_type(off_type(-1));
+        }
+        char * base = eback();
+        char * next = gptr();
+        char * end = egptr();
+        char * target = nullptr;
+        if (dir == std::ios_base::beg) {
+            target = base + offset;
+        } else if (dir == std::ios_base::cur) {
+            target = next + offset;
+        } else if (dir == std::ios_base::end) {
+            target = end + offset;
+        }
+        if (target == nullptr || target < base || target > end) {
+            return pos_type(off_type(-1));
+        }
+        setg(base, target, end);
+        return pos_type(target - base);
+    }
+
+    pos_type seekpos(pos_type position, std::ios_base::openmode which) override {
+        return seekoff(off_type(position), std::ios_base::beg, which);
+    }
+};
 
 template <typename T>
 T read_scalar(std::istream & input) {
@@ -131,6 +168,12 @@ WavData read_wav_f32(std::istream & input) {
     }
 
     throw std::runtime_error("unsupported WAV encoding (need PCM16, PCM24, or float32)");
+}
+
+WavData read_wav_f32(std::string_view input) {
+    MemoryStreamBuffer buffer(input);
+    std::istream stream(&buffer);
+    return read_wav_f32(stream);
 }
 
 WavData read_wav_f32(const std::filesystem::path & path) {

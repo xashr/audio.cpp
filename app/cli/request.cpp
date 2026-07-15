@@ -53,6 +53,15 @@ engine::runtime::AudioBuffer read_audio_buffer(std::istream & input) {
     };
 }
 
+engine::runtime::AudioBuffer read_audio_buffer(std::string_view input) {
+    const auto wav = engine::audio::read_wav_f32(input);
+    return engine::runtime::AudioBuffer{
+        wav.sample_rate,
+        wav.channels,
+        wav.samples,
+    };
+}
+
 std::string json_option_string(const engine::io::json::Value & value) {
     if (value.is_string()) {
         return value.as_string();

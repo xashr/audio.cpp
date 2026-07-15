@@ -482,28 +482,26 @@ const engine::runtime::AudioBuffer & select_audio_output(const engine::runtime::
     throw std::runtime_error("model result did not contain exactly one audio output");
 }
 
-engine::runtime::TaskRequest build_openai_transcription_request(const Value & body, const std::filesystem::path & base_dir) {
+engine::runtime::TaskRequest build_openai_transcription_request(
+    const Value & body,
+    const std::filesystem::path & base_dir,
+    const std::string * uploaded_audio = nullptr) {
     const auto * audio = body.find("audio");
-    const Value * audio_data = nullptr;
     if (audio == nullptr) {
         audio = body.find("audio_path");
     }
     if (audio == nullptr) {
-        audio = audio_data = body.find("audio_data");
-    }
-    if (audio == nullptr) {
         audio = body.find("file");
     }
-    if (audio == nullptr || !audio->is_string()) {
-        throw std::runtime_error("transcription request requires audio, audio_data, audio_path, or file path");
+    if (uploaded_audio == nullptr && (audio == nullptr || !audio->is_string())) {
+        throw std::runtime_error("transcription request requires audio, audio_path, or file path");
     }
 
     engine::runtime::TaskRequest request;
-    if (audio_data == nullptr) {
+    if (uploaded_audio == nullptr) {
         request.audio_input = minitts::cli::read_audio_buffer(resolve_path(base_dir, audio->as_string()));
     } else {
-        auto audio_stream = std::istringstream(audio_data->as_string());
-        request.audio_input = minitts::cli::read_audio_buffer(audio_stream);
+        request.audio_input = minitts::cli::read_audio_buffer(std::string_view(*uploaded_audio));
     }
     request.options = options_from_object(body.find("options"));
     std::string language;
@@ -966,14 +964,13 @@ HttpResponse ServerState::handle_transcription_multipart(const std::string & bod
 
     engine::io::json::Value::Object fields;
     fields.emplace("model", engine::io::json::Value::make_string(model_id));
-    fields.emplace("audio_data", engine::io::json::Value::make_string(file_part->data));
     if (!language.empty()) {
         fields.emplace("language", engine::io::json::Value::make_string(language));
     }
     const auto body = engine::io::json::Value::make_object(std::move(fields));
 
     auto & model = require_model(body);
-    const auto request = build_openai_transcription_request(body, request_base_);
+    const auto request = build_openai_transcription_request(body, request_base_, &file_part->data);
     if (stream) {
         return run_transcription_stream(model, request);
     }
