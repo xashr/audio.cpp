@@ -118,7 +118,6 @@ jobs:
             platforms: linux/amd64
             arch: amd64
             runs_on: ubuntu-24.04
-            free_disk: true
             cuda_version: "12.9.2"
             enabled: true
           - tag: cuda12
@@ -126,7 +125,6 @@ jobs:
             platforms: linux/arm64
             arch: arm64
             runs_on: ubuntu-24.04-arm
-            free_disk: true
             cuda_version: "12.9.2"
             enabled: true
           # ── CUDA 13 ──
@@ -135,7 +133,6 @@ jobs:
             platforms: linux/amd64
             arch: amd64
             runs_on: ubuntu-24.04
-            free_disk: true
             cuda_version: "13.3.0"
             enabled: true
           - tag: cuda13
@@ -143,7 +140,6 @@ jobs:
             platforms: linux/arm64
             arch: arm64
             runs_on: ubuntu-24.04-arm
-            free_disk: true
             cuda_version: "13.3.0"
             enabled: true
     steps:
@@ -166,18 +162,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Free disk space
-        if: ${{ matrix.enabled == true && matrix.free_disk }}
-        uses: ggml-org/free-disk-space@v1.3.1
-        with:
-          tool-cache: false
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
 
       - name: Build and push
         id: push
