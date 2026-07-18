@@ -51,6 +51,7 @@ option(ENGINE_ENABLE_METAL "Build ggml with Metal backend support" ${ENGINE_DEFA
 option(ENGINE_ENABLE_LLAMAFILE "Build ggml with llamafile SGEMM support" ${ENGINE_DEFAULT_ENABLE_LLAMAFILE})
 option(ENGINE_ENABLE_CUDA_GRAPHS "Enable ggml CUDA graphs support" ${ENGINE_DEFAULT_ENABLE_CUDA_GRAPHS})
 option(ENGINE_ENABLE_NATIVE_CPU "Build ggml CPU kernels with native host ISA flags" ${ENGINE_DEFAULT_ENABLE_NATIVE_CPU})
+option(ENGINE_ENABLE_CPU_ALL_VARIANTS "Build all CPU variants as shared libraries for runtime auto-selection" OFF)
 option(ENGINE_ENABLE_OPENMP "Build host code with OpenMP support" ON)
 option(ENGINE_BUILD_EXAMPLES "Build example binaries" OFF)
 option(ENGINE_BUILD_TESTS "Build framework unit tests" OFF)
@@ -67,6 +68,16 @@ if (ENGINE_ENABLE_OPENMP)
     find_package(OpenMP REQUIRED COMPONENTS CXX)
 endif()
 
+# Multi-arch CPU variants override: builds CPU backends as loadable shared objects
+if (ENGINE_ENABLE_CPU_ALL_VARIANTS)
+    set(GGML_BACKEND_DL ON CACHE BOOL "Build ggml backends as shared libraries" FORCE)
+    set(GGML_CPU_ALL_VARIANTS ON CACHE BOOL "Build all CPU backend variants" FORCE)
+    set(ENGINE_NATIVE_CPU_OVERRIDE OFF)
+else()
+    set(GGML_BACKEND_DL OFF CACHE BOOL "Build ggml backends as shared libraries" FORCE)
+    set(ENGINE_NATIVE_CPU_OVERRIDE ${ENGINE_ENABLE_NATIVE_CPU})
+endif()
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build static libraries" FORCE)
 set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "Do not build upstream examples" FORCE)
 set(GGML_BUILD_TESTS OFF CACHE BOOL "Do not build upstream tests" FORCE)
@@ -77,7 +88,7 @@ set(GGML_VULKAN ${ENGINE_ENABLE_VULKAN} CACHE BOOL "Build ggml with Vulkan backe
 set(GGML_METAL ${ENGINE_ENABLE_METAL} CACHE BOOL "Build ggml with Metal backend support" FORCE)
 set(GGML_LLAMAFILE ${ENGINE_ENABLE_LLAMAFILE} CACHE BOOL "Build ggml with llamafile SGEMM support" FORCE)
 set(GGML_CUDA_GRAPHS ${ENGINE_ENABLE_CUDA_GRAPHS} CACHE BOOL "Enable ggml CUDA graphs support" FORCE)
-set(GGML_NATIVE ${ENGINE_ENABLE_NATIVE_CPU} CACHE BOOL "Build ggml CPU kernels with native host ISA flags" FORCE)
+set(GGML_NATIVE ${ENGINE_NATIVE_CPU_OVERRIDE} CACHE BOOL "Build ggml CPU kernels with native host ISA flags" FORCE)
 
 set(SPM_ENABLE_SHARED OFF CACHE BOOL "Build sentencepiece shared libs" FORCE)
 set(SPM_BUILD_TEST OFF CACHE BOOL "Do not build sentencepiece tests" FORCE)

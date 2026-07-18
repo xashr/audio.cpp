@@ -14,6 +14,7 @@ FROM docker.io/ubuntu:$UBUNTU_VERSION AS build
 
 ARG GCC_VERSION=14
 ARG ENGINE_ENABLE_NATIVE_CPU=ON
+ARG ENGINE_ENABLE_CPU_ALL_VARIANTS=OFF
 
 # Install build toolchain
 RUN apt-get update && \
@@ -34,6 +35,7 @@ RUN cmake -S . -B build \
         -DENGINE_ENABLE_VULKAN=OFF \
         -DENGINE_ENABLE_OPENMP=ON \
         -DENGINE_ENABLE_NATIVE_CPU=$ENGINE_ENABLE_NATIVE_CPU \
+        -DENGINE_ENABLE_CPU_ALL_VARIANTS=$ENGINE_ENABLE_CPU_ALL_VARIANTS \
         -DENGINE_BUILD_EXAMPLES=OFF \
         -DENGINE_BUILD_TESTS=OFF \
         -DENGINE_BUILD_WARMBENCH=OFF && \
@@ -47,6 +49,7 @@ RUN cmake -S . -B build \
 RUN mkdir -p /app/full && \
     cp build/bin/audiocpp_cli build/bin/audiocpp_server \
        build/bin/model_perf build/bin/miocodec_wavlm_parity /app/full/ && \
+    cp build/bin/libggml-cpu*.so 2>/dev/null /app/full/ || true && \
     cp .devops/entrypoint.sh /app/full/entrypoint.sh && \
     chmod +x /app/full/entrypoint.sh
 
