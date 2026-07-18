@@ -127,21 +127,21 @@ jobs:
             runs_on: ubuntu-24.04-arm
             cuda_version: "12.9.2"
             enabled: true
-          # ── CUDA 13 (temporarily disabled for testing) ──
+          # ── CUDA 13 ──
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/amd64
             arch: amd64
             runs_on: ubuntu-24.04
             cuda_version: "13.3.0"
-            enabled: false
+            enabled: true
           - tag: cuda13
             dockerfile: .devops/cuda.Dockerfile
             platforms: linux/arm64
             arch: arm64
             runs_on: ubuntu-24.04-arm
             cuda_version: "13.3.0"
-            enabled: false
+            enabled: true
     steps:
       - name: Skip when not enabled
         if: ${{ matrix.enabled != true }}
