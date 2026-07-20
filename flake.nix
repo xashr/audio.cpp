@@ -12,7 +12,6 @@
       nixpkgsFor = forAllSystems (system: import nixpkgs { 
         inherit system; 
         config.allowUnfree = true;
-        config.cudaSupport = true;
       });
     in
     {
@@ -38,11 +37,9 @@
                 cmake
                 ninja
                 pkg-config
-                makeWrapper
               ] ++ pkgs.lib.optional cudaSupport pkgs.cudaPackages.cuda_nvcc;
 
               buildInputs = with pkgs; [
-                libunwind
                 myPython
               ] ++ pkgs.lib.optionals vulkanSupport [
                 vulkan-headers
@@ -72,8 +69,8 @@
 
                 mkdir -p $out/bin
                 
-                # Find and copy the built C++ executables
-                find . -type f -executable \( -name "audiocpp_cli" -o -name "audiocpp_server" -o -name "audiocpp_gguf" \) -exec cp {} $out/bin/ \;
+                # Copy the built C++ executables directly from the bin directory
+                cp bin/audiocpp_cli bin/audiocpp_server bin/audiocpp_gguf $out/bin/
 
                 # Install the python model manager script
                 cp $src/tools/model_manager.py $out/bin/audiocpp_model_manager
