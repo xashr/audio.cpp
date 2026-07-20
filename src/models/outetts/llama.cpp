@@ -21,7 +21,6 @@
 #include <random>
 #include <stdexcept>
 #include <string>
-#include <unordered_set>
 
 namespace engine::models::outetts {
 namespace {
@@ -157,7 +156,6 @@ modules::QwenCausalDecoderConfig decoder_config(const OuteTTSConfig & c) {
     out.stack.runtime.attention.prefill_mode = modules::QwenDecoderAttentionMode::FlashGroupedViewKV;
     out.stack.runtime.attention.static_mode = modules::QwenDecoderAttentionMode::FlashGroupedViewKV;
     out.stack.runtime.static_cache.update_mode = modules::QwenDecoderStaticCacheUpdateMode::DirectSetRows;
-    out.stack.runtime.static_cache.transpose_context = true;
     out.logits_size = c.vocab_size;
     return out;
 }
@@ -183,17 +181,29 @@ modules::QwenCausalDecoderWeights graph_weights(
     return out;
 }
 
+struct SamplingScratch {
+    std::vector<int32_t> repeated_ids;
+    std::vector<size_t> order;
+    std::vector<float> probabilities;
+};
+
 void apply_repetition_penalty(
     std::vector<float> & logits,
     const std::vector<int32_t> & ids,
     int64_t window,
-    float penalty) {
+    float penalty,
+    std::vector<int32_t> & repeated_ids) {
     if (penalty == 1.0F || window == 0) {
         return;
     }
     const size_t begin = ids.size() > static_cast<size_t>(window) ? ids.size() - static_cast<size_t>(window) : 0;
-    std::unordered_set<int32_t> seen(ids.begin() + static_cast<std::ptrdiff_t>(begin), ids.end());
-    for (const int32_t id : seen) {
+    repeated_ids.clear();
+    for (auto it = ids.begin() + static_cast<std::ptrdiff_t>(begin); it != ids.end(); ++it) {
+        if (std::find(repeated_ids.begin(), repeated_ids.end(), *it) == repeated_ids.end()) {
+            repeated_ids.push_back(*it);
+        }
+    }
+    for (const int32_t id : repeated_ids) {
         if (id < 0 || static_cast<size_t>(id) >= logits.size()) {
             continue;
         }
@@ -203,22 +213,38 @@ void apply_repetition_penalty(
 }
 
 int32_t sample_token(
-    std::vector<float> logits,
+    const std::vector<float> & logits,
     const OuteTTSGenerateOptions & o,
     std::mt19937 & rng,
     const sampling::TorchCudaSamplingPolicy & sampling_policy,
-    uint64_t call_index) {
+    uint64_t call_index,
+    SamplingScratch & scratch) {
     if (!(o.temperature > 0.0F) || !std::isfinite(o.temperature)) {
         return static_cast<int32_t>(std::max_element(logits.begin(), logits.end()) - logits.begin());
     }
-    std::vector<size_t> order(logits.size());
+    auto & order = scratch.order;
+    order.resize(logits.size());
     std::iota(order.begin(), order.end(), 0);
-    std::sort(order.begin(), order.end(), [&](size_t a, size_t b) { return logits[a] > logits[b]; });
-    if (o.top_k > 0 && static_cast<size_t>(o.top_k) < order.size()) {
-        order.resize(static_cast<size_t>(o.top_k));
+    const size_t kept_by_top_k =
+        o.top_k > 0 && static_cast<size_t>(o.top_k) < order.size()
+            ? static_cast<size_t>(o.top_k)
+            : order.size();
+    const auto by_logit_desc = [&](size_t a, size_t b) {
+        return logits[a] > logits[b];
+    };
+    if (kept_by_top_k < order.size()) {
+        std::partial_sort(
+            order.begin(),
+            order.begin() + static_cast<std::ptrdiff_t>(kept_by_top_k),
+            order.end(),
+            by_logit_desc);
+        order.resize(kept_by_top_k);
+    } else {
+        std::sort(order.begin(), order.end(), by_logit_desc);
     }
     const float max_logit = logits[order.front()];
-    std::vector<float> probabilities(order.size(), 0.0F);
+    auto & probabilities = scratch.probabilities;
+    probabilities.assign(order.size(), 0.0F);
     double sum = 0.0;
     for (size_t i = 0; i < order.size(); ++i) {
         probabilities[i] = std::exp((logits[order[i]] - max_logit) / o.temperature);
@@ -319,7 +345,7 @@ public:
 
     void import_state(const runtime::TransformerKVState & state) { cache_.import_state(state); }
 
-    std::vector<float> run(int32_t token) {
+    void run(int32_t token, std::vector<float> & logits) {
         if (cache_.valid_steps() >= capacity_) throw std::runtime_error("OuteTTS cached-step capacity exceeded");
         ggml_backend_tensor_set(input_id_, &token, 0, sizeof(token));
         const int32_t position = static_cast<int32_t>(cache_.current_end());
@@ -331,10 +357,11 @@ public:
         const auto status = core::compute_backend_graph(backend_, graph_);
         ggml_backend_synchronize(backend_);
         if (status != GGML_STATUS_SUCCESS) throw std::runtime_error("OuteTTS cached-step graph compute failed");
-        std::vector<float> logits(static_cast<size_t>(config_.vocab_size));
+        if (logits.size() != static_cast<size_t>(config_.vocab_size)) {
+            logits.resize(static_cast<size_t>(config_.vocab_size));
+        }
         ggml_backend_tensor_get(logits_, logits.data(), 0, logits.size() * sizeof(float));
         cache_.advance_after_direct_append(1);
-        return logits;
     }
 
 private:
@@ -605,6 +632,7 @@ OuteTTSGenerateResult OuteTTSLlamaRuntime::generate(
     std::vector<float> logits = std::move(prefill.logits);
     double sample_ms = 0.0;
     double cached_step_compute_ms = 0.0;
+    SamplingScratch sampling_scratch;
     for (int64_t i = 0; i < options.max_new_tokens; ++i) {
         if (static_cast<int64_t>(all.size()) >= impl_->assets->generation.max_length) {
             result.stop_reason = OuteTTSStopReason::ContextLimit;
@@ -612,10 +640,12 @@ OuteTTSGenerateResult OuteTTSLlamaRuntime::generate(
         }
         const auto sample_start = std::chrono::steady_clock::now();
         apply_repetition_penalty(
-            logits, all, options.repetition_window, options.repetition_penalty);
+            logits, all, options.repetition_window, options.repetition_penalty,
+            sampling_scratch.repeated_ids);
         const int32_t token = sample_token(
-            std::move(logits), sampling_options, rng,
-            impl_->sampling_policy, static_cast<uint64_t>(i));
+            logits, sampling_options, rng,
+            impl_->sampling_policy, static_cast<uint64_t>(i),
+            sampling_scratch);
         sample_ms += debug::elapsed_ms(sample_start);
         result.tokens.push_back(token);
         if (token == eos_id) {
@@ -633,7 +663,7 @@ OuteTTSGenerateResult OuteTTSLlamaRuntime::generate(
         }
         all.push_back(token);
         const auto step_start = std::chrono::steady_clock::now();
-        logits = step.run(token);
+        step.run(token, logits);
         cached_step_compute_ms += debug::elapsed_ms(step_start);
     }
     debug::trace_log_scalar(
