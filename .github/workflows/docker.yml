@@ -90,7 +90,8 @@ jobs:
 
       - name: Determine lowercase image repository
         id: image_repo
-        run: echo "image_repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+        # TEST: hardcoded uppercase owner to verify lowercase conversion
+        run: echo "image_repo=$(echo 'Xashr/audio.cpp' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
   # ── Build each arch, push by digest ─────────────────────────────────────────
   build:
