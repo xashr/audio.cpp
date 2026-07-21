@@ -502,6 +502,21 @@ CATALOG: tuple[ModelPackage, ...] = (
         ),
     ),
     ModelPackage(
+        id="vietneu_tts_v3_turbo",
+        display_name="VieNeu-TTS v3 Turbo Base",
+        target_directory="VieNeu-TTS-v3-Turbo",
+        source=SnapshotSource(repo_id="phuocnguyen90/VieNeu-TTS-v3-Turbo-GGUF"),
+        required_files=(
+            "config.json",
+            "model.gguf",
+            "speech_tokenizer/config.json",
+            "tokenizer_config.json",
+            "tokenizer.json",
+            "special_tokens_map.json",
+        ),
+        description="Installs VieNeu-TTS v3 Turbo GGUF model and configuration sidecars for C++ inference.",
+    ),
+    ModelPackage(
         id="qwen3_tts_1_7b_base",
         display_name="Qwen3 TTS 12Hz 1.7B Base",
         target_directory="Qwen3-TTS-12Hz-1.7B-Base",
