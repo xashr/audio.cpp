@@ -19,15 +19,35 @@ For every **installable, standalone** `ModelPackage`:
 | `ModelPackage.family` | The loader family string advertised by the C++ loader |
 | `model_specs/<family>.json` | Present when the family uses package-spec loading |
 | `registry.cpp` entry | Uncommented `make_<family>_loader()` (or the family's actual factory name) |
+| README package table | Lists the package; use **Unavailable** when not installable |
 
 Dependency / subcomponent packages (`standalone=False`, with
 `parent_package_id`) do **not** need their own loader.
+
+Bundled loaders without a downloadable package (today: `silero_vad`) are allowed.
+If you add another, list it in `BUNDLED_LOADERS_WITHOUT_PACKAGE` inside
+`tools/check_loader_catalog_sync.py`.
+
+## Verified parked families (this release tree)
+
+These registry stubs are **commented out**, and the loader sources are **not
+present** under `src/models/` / `include/engine/models/` (or community paths):
+
+| Registry stub | Catalog package(s) | Notes |
+|---|---|---|
+| `kokoro_tts` | `kokoro_82m_bf16` | Warm-bench tests remain; no loader sources |
+| `higgs_tts` | `higgs_audio_v3_tts_4b` (`family=higgs_audio_tts`) | Name mismatch: pick one id when re-enabling |
+| `parakeet_tdt` | `parakeet_tdt_0_6b_v3` | Warm-bench / docs may remain |
+
+Matching catalog entries must use `UnsupportedSource` until the loader code is
+actually merged and registered.
 
 If a loader is not ready for this release tree:
 
 1. Keep it **commented out** in `src/framework/runtime/registry.cpp`, and
 2. Mark matching catalog packages as `UnsupportedSource(reason=...)`, **or**
-   remove them from `CATALOG`.
+   remove them from `CATALOG`, and
+3. Mark the README package row **Unavailable**.
 
 Do **not** leave a live `SnapshotSource` for a commented-out loader.
 
@@ -42,13 +62,15 @@ Do **not** leave a live `SnapshotSource` for a commented-out loader.
 3. Add `model_specs/<family>.json` when the family needs package-spec discovery.
 4. Add one or more `ModelPackage` entries in `tools/model_manager.py`:
    - Set `family="<family>"` explicitly when the package id does not strip cleanly
-     to the loader id (examples: `kokoro_82m_bf16` → `kokoro_tts`).
+     to the loader id (examples: `kokoro_82m_bf16` → `kokoro_tts`,
+     `vietneu_tts_v3_turbo` → `vietneu_tts`).
    - Set `tasks=(...)` when defaults would be ambiguous.
    - Use `standalone=False` + `parent_package_id` for tokenizers / subcomponents.
 5. Update README supported-model / package tables.
 6. Run:
 
 ```bash
+python3 tools/check_loader_catalog_sync.py --self-test
 python3 tools/check_loader_catalog_sync.py
 # after building:
 build/.../bin/audiocpp_cli --list-loaders --json
@@ -64,7 +86,7 @@ for that family set `"family"` to the same string.
 2. Convert related **standalone** packages to `UnsupportedSource` with a reason
    that names the missing loader and points at this doc (or delete them).
 3. Leave `family=` / `tasks=` on unsupported entries if useful for history.
-4. Update README so the package is not listed as a ready install target.
+4. Update README so the package row says **Unavailable**.
 5. Run `python3 tools/check_loader_catalog_sync.py`.
 
 ## Family id consistency
@@ -75,13 +97,23 @@ Pick **one** family string and use it everywhere:
 - `make_<family>_loader()` naming (when practical)
 - `model_specs/<family>.json`
 - `ModelPackage.family`
+- README “Supported Models” family column
 
 Avoid mismatches such as catalog `higgs_audio_tts` with a registry stub named
-`higgs_tts`. Integrators match on the string; aliases are not implied.
+`higgs_tts`. Integrators match on the string; aliases are not implied (the sync
+check only knows the small parked alias map for currently parked stubs).
 
 ## CI
 
-`tools/check_loader_catalog_sync.py` runs in GitHub Actions. It parses active
-(non-commented) loader factories from `registry.cpp` and compares them to
-installable standalone packages from `model_manager.py`. It does not require a
-compiled binary.
+`tools/check_loader_catalog_sync.py` runs in GitHub Actions on Linux/macOS/Windows
+builds. It:
+
+- Parses active vs commented `make_*_loader()` calls in `registry.cpp`
+- Compares them to installable standalone packages from `model_manager.py`
+- Cross-checks the README recommended package table
+- Does **not** require a compiled binary
+
+```bash
+python3 tools/check_loader_catalog_sync.py --self-test
+python3 tools/check_loader_catalog_sync.py
+```

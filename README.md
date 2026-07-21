@@ -385,6 +385,7 @@ Recommended top-level install packages:
 | `hviske_asr` | Hviske ASR | **Yes** |
 | `irodori_tts_500m_v3` | Irodori-TTS 500M v3 | No |
 | `irodori_tts_600m_v3_voice_design` | Irodori-TTS 600M v3 VoiceDesign | No |
+| `index_tts2` | IndexTTS-2 | **Yes** |
 | `kokoro_82m_bf16` | Kokoro 82M bf16 | Unavailable (loader not in this tree) |
 | `marblenet_vad` | MarbleNet VAD converted layout | No |
 | `mel_band_roformer` | Mel-Band RoFormer MLX | **Yes** |
@@ -414,6 +415,7 @@ Recommended top-level install packages:
 | `stable_audio_3_small_sfx` | Stable Audio 3 Small SFX | **Yes** |
 | `supertonic_3` | Supertonic 3 | **Yes** |
 | `vevo2` | Vevo2 | No |
+| `vietneu_tts_v3_turbo` | VieNeu-TTS v3 Turbo | **Yes** |
 | `vibevoice_1_5b` | VibeVoice 1.5B | No |
 | `vibevoice_7b` | VibeVoice 7B | No |
 | `vibevoice_asr` | VibeVoice ASR | No |

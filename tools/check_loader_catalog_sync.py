@@ -6,6 +6,17 @@ The machine-readable contract from PR #74 makes package ``family`` and
 must not advertise installable packages for families that are commented out or
 missing from ``src/framework/runtime/registry.cpp``.
 
+Verified release-tree facts this check encodes:
+
+- Parked registry stubs currently include ``kokoro_tts``, ``higgs_tts``, and
+  ``parakeet_tdt``. Those loader *sources are not in this tree* (no
+  ``src/models/<family>`` / matching include); only comments + warm-bench tests
+  remain. Matching catalog packages must be ``UnsupportedSource``.
+- ``higgs_audio_tts`` is treated as an alias of the parked ``higgs_tts`` stub
+  until one family id is chosen when the loader returns.
+- ``silero_vad`` is a registered loader without a model_manager package (bundled
+  asset path). That is allowed; see docs/maintainers/loader_and_catalog.md.
+
 See docs/maintainers/loader_and_catalog.md.
 """
 
@@ -14,13 +25,26 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = REPO_ROOT / "src" / "framework" / "runtime" / "registry.cpp"
 MODEL_MANAGER_PATH = REPO_ROOT / "tools" / "model_manager.py"
+README_PATH = REPO_ROOT / "README.md"
 
 _LOADER_CALL_RE = re.compile(r"\bmake_([a-z0-9_]+)_loader\s*\(\s*\)")
+
+# Catalog family strings that refer to a differently named parked registry stub.
+# When re-enabling a loader, collapse these to one id everywhere.
+PARKED_FAMILY_ALIASES: dict[str, set[str]] = {
+    "higgs_tts": {"higgs_audio_tts"},
+}
+
+# Registered loaders that intentionally have no installable ModelPackage.
+BUNDLED_LOADERS_WITHOUT_PACKAGE: set[str] = {
+    "silero_vad",
+}
 
 
 def parse_registry_loaders(registry_text: str) -> tuple[set[str], set[str]]:
@@ -40,6 +64,225 @@ def parse_registry_loaders(registry_text: str) -> tuple[set[str], set[str]]:
     return active, commented
 
 
+def family_is_registered(family: str, active: set[str]) -> bool:
+    return family in active
+
+
+def family_is_parked(family: str, commented: set[str]) -> bool:
+    if family in commented:
+        return True
+    for stub, aliases in PARKED_FAMILY_ALIASES.items():
+        if stub in commented and family in aliases:
+            return True
+    return False
+
+
+def parked_hint(family: str, commented: set[str]) -> str:
+    if family in commented:
+        return " (commented out in registry.cpp)"
+    for stub, aliases in PARKED_FAMILY_ALIASES.items():
+        if stub in commented and family in aliases:
+            return (
+                f" (parked registry stub is '{stub}'; catalog family '{family}' "
+                "must stay UnsupportedSource until one id is registered)"
+            )
+    return ""
+
+
+def parse_readme_package_table(readme_text: str) -> dict[str, str]:
+    """Map package id -> status cell from the recommended install table."""
+    match = re.search(
+        r"\| Package id \| Model \| HF ready-to-use repo \|\n\|[^\n]+\n((?:\|.*\n)+)",
+        readme_text,
+    )
+    if not match:
+        return {}
+    rows: dict[str, str] = {}
+    for line in match.group(1).splitlines():
+        cols = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cols) < 3 or not cols[0].startswith("`"):
+            continue
+        package_id = cols[0].strip("`")
+        rows[package_id] = cols[2]
+    return rows
+
+
+def check_catalog(
+    *,
+    active: set[str],
+    commented: set[str],
+    packages: list,
+    package_payload,
+    default_family_from_package_id,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    installable_families: set[str] = set()
+
+    for package in packages:
+        payload = package_payload(package)
+        package_id = str(payload.get("id") or "")
+        family = str(payload.get("family") or "").strip()
+        installable = bool(payload.get("installable"))
+        standalone = bool(payload.get("standalone", True))
+        source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+        source_kind = str(source.get("kind") or "")
+        inferred = default_family_from_package_id(package_id)
+        explicit = getattr(package, "family", None)
+
+        if not family:
+            errors.append(
+                f"{package_id}: missing family (set ModelPackage.family or fix id)"
+            )
+            continue
+
+        if not installable or source_kind == "unsupported":
+            if family_is_registered(family, active):
+                warnings.append(
+                    f"{package_id}: UnsupportedSource but family '{family}' is already "
+                    "registered — restore a real SnapshotSource/Composite/Converter"
+                )
+            elif not family_is_parked(family, commented):
+                warnings.append(
+                    f"{package_id}: UnsupportedSource family '{family}' is neither "
+                    "registered nor a parked registry stub/alias"
+                )
+            continue
+
+        if not standalone:
+            continue
+
+        installable_families.add(family)
+
+        if explicit is None and inferred != family:
+            errors.append(
+                f"{package_id}: resolved family '{family}' != id inference "
+                f"'{inferred}' without ModelPackage.family set"
+            )
+
+        if explicit is None and inferred not in active and family in active:
+            # Should be unreachable if family comes from inference, but keep tight.
+            errors.append(
+                f"{package_id}: set ModelPackage.family explicitly "
+                f"(id inference '{inferred}' is not a registered loader)"
+            )
+
+        if not family_is_registered(family, active):
+            errors.append(
+                f"{package_id}: installable standalone package family '{family}' "
+                f"is not registered in registry.cpp{parked_hint(family, commented)}"
+            )
+        elif family_is_parked(family, commented):
+            # Active and commented with same name should not happen; still guard.
+            errors.append(
+                f"{package_id}: family '{family}' is both active and commented in registry.cpp"
+            )
+
+    for stub in sorted(commented):
+        aliases = {stub} | PARKED_FAMILY_ALIASES.get(stub, set())
+        leaked = sorted(fam for fam in aliases if fam in installable_families)
+        if leaked:
+            errors.append(
+                f"parked loader '{stub}' still has installable catalog families: "
+                + ", ".join(leaked)
+            )
+
+    for family in sorted(active):
+        if family in BUNDLED_LOADERS_WITHOUT_PACKAGE:
+            continue
+        if family not in installable_families:
+            warnings.append(
+                f"registered loader '{family}' has no installable standalone "
+                "ModelPackage (add a package or list it in "
+                "BUNDLED_LOADERS_WITHOUT_PACKAGE if intentional)"
+            )
+
+    return errors, warnings
+
+
+def check_readme(
+    *,
+    readme_text: str,
+    packages: list,
+    package_payload,
+) -> tuple[list[str], list[str]]:
+    errors: list[str] = []
+    warnings: list[str] = []
+    table = parse_readme_package_table(readme_text)
+    if not table:
+        errors.append("README.md: could not parse recommended package table")
+        return errors, warnings
+
+    catalog_by_id = {}
+    for package in packages:
+        payload = package_payload(package)
+        catalog_by_id[str(payload["id"])] = payload
+
+    for package_id, status in sorted(table.items()):
+        payload = catalog_by_id.get(package_id)
+        if payload is None:
+            errors.append(f"README.md: package `{package_id}` not in model_manager CATALOG")
+            continue
+        installable = bool(payload.get("installable"))
+        unavailable = "unavailable" in status.lower()
+        if unavailable and installable:
+            errors.append(
+                f"README.md: `{package_id}` marked Unavailable but catalog is installable"
+            )
+        if not unavailable and not installable:
+            errors.append(
+                f"README.md: `{package_id}` looks installable in the table but catalog "
+                "is UnsupportedSource — mark Unavailable or restore a source"
+            )
+
+    for package_id, payload in sorted(catalog_by_id.items()):
+        if not payload.get("installable") or not payload.get("standalone", True):
+            continue
+        if package_id not in table:
+            errors.append(
+                f"README.md: installable standalone package `{package_id}` missing "
+                "from recommended package table"
+            )
+
+    return errors, warnings
+
+
+class _SyncCheckSelfTests(unittest.TestCase):
+    def test_parse_active_and_commented(self) -> None:
+        text = """
+        // make_kokoro_tts_loader(),
+        make_pocket_tts_loader(),
+        make_higgs_tts_loader(), // trailing comment still active
+        """
+        active, commented = parse_registry_loaders(text)
+        self.assertEqual(active, {"pocket_tts", "higgs_tts"})
+        self.assertEqual(commented, {"kokoro_tts"})
+
+    def test_parked_alias_blocks_installable(self) -> None:
+        class Pkg:
+            def __init__(self, family=None):
+                self.family = family
+
+        def payload(package):
+            return {
+                "id": "higgs_audio_v3_tts_4b",
+                "family": "higgs_audio_tts",
+                "installable": True,
+                "standalone": True,
+                "source": {"kind": "huggingface_snapshot"},
+            }
+
+        errors, _ = check_catalog(
+            active={"pocket_tts"},
+            commented={"higgs_tts"},
+            packages=[Pkg(family="higgs_audio_tts")],
+            package_payload=payload,
+            default_family_from_package_id=lambda _pid: "higgs_audio_v3_tts",
+        )
+        self.assertTrue(any("higgs_audio_tts" in e for e in errors))
+        self.assertTrue(any("parked loader 'higgs_tts'" in e for e in errors))
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -48,7 +291,22 @@ def main() -> int:
         default=REGISTRY_PATH,
         help="Path to registry.cpp",
     )
+    parser.add_argument(
+        "--skip-readme",
+        action="store_true",
+        help="Skip README package-table cross-check",
+    )
+    parser.add_argument(
+        "--self-test",
+        action="store_true",
+        help="Run built-in unit tests and exit",
+    )
     args = parser.parse_args()
+
+    if args.self_test:
+        suite = unittest.defaultTestLoader.loadTestsFromTestCase(_SyncCheckSelfTests)
+        result = unittest.TextTestRunner(verbosity=2).run(suite)
+        return 0 if result.wasSuccessful() else 1
 
     if not args.registry.is_file():
         print(f"error: registry not found: {args.registry}", file=sys.stderr)
@@ -65,47 +323,30 @@ def main() -> int:
         print("error: no active loaders parsed from registry.cpp", file=sys.stderr)
         return 2
 
-    errors: list[str] = []
-    warnings: list[str] = []
+    errors, warnings = check_catalog(
+        active=active,
+        commented=commented,
+        packages=list(mm.CATALOG),
+        package_payload=mm.package_payload,
+        default_family_from_package_id=mm._default_family_from_package_id,
+    )
 
-    for package in mm.CATALOG:
-        payload = mm.package_payload(package)
-        package_id = str(payload.get("id") or "")
-        family = str(payload.get("family") or "").strip()
-        installable = bool(payload.get("installable"))
-        standalone = bool(payload.get("standalone", True))
-        source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
-        source_kind = str(source.get("kind") or "")
-
-        if not family:
-            errors.append(f"{package_id}: missing family (set ModelPackage.family or fix id)")
-            continue
-
-        if not installable or source_kind == "unsupported":
-            # Parked / unavailable packages may keep a family for documentation.
-            if family in active:
-                warnings.append(
-                    f"{package_id}: UnsupportedSource but family '{family}' is already "
-                    "registered — restore a real SnapshotSource/Composite/Converter"
-                )
-            continue
-
-        if not standalone:
-            # Dependency / subcomponent packages do not need their own loader.
-            continue
-
-        if family not in active:
-            hint = ""
-            if family in commented:
-                hint = " (commented out in registry.cpp)"
-            elif family == "higgs_audio_tts" and "higgs_tts" in commented:
-                hint = " (registry stub uses higgs_tts; keep family ids consistent)"
-            errors.append(
-                f"{package_id}: installable standalone package family '{family}' "
-                f"is not registered in registry.cpp{hint}"
+    if not args.skip_readme:
+        if not README_PATH.is_file():
+            errors.append(f"README.md not found: {README_PATH}")
+        else:
+            readme_errors, readme_warnings = check_readme(
+                readme_text=README_PATH.read_text(encoding="utf-8"),
+                packages=list(mm.CATALOG),
+                package_payload=mm.package_payload,
             )
+            errors.extend(readme_errors)
+            warnings.extend(readme_warnings)
 
-    print(f"active_loaders={len(active)} catalog_packages={len(mm.CATALOG)}")
+    print(
+        f"active_loaders={len(active)} commented_loaders={len(commented)} "
+        f"catalog_packages={len(mm.CATALOG)}"
+    )
     for warning in warnings:
         print(f"warning: {warning}")
     if errors:
@@ -113,8 +354,8 @@ def main() -> int:
         for error in errors:
             print(f"  - {error}", file=sys.stderr)
         print(
-            "\nFix: either register the loader in registry.cpp + model_specs/, "
-            "or mark the package UnsupportedSource. See "
+            "\nFix: register the loader in registry.cpp (with sources in-tree), "
+            "or mark the package UnsupportedSource / update README. See "
             "docs/maintainers/loader_and_catalog.md",
             file=sys.stderr,
         )

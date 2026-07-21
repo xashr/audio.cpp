@@ -23,9 +23,11 @@ If you want to add support for a model family that is already listed, please foc
 When a loader is registered (or parked), keep the **package catalog** in sync. Installable `ModelPackage` entries must not advertise families that `audiocpp_cli --list-loaders` does not expose. Follow the checklist in [docs/maintainers/loader_and_catalog.md](docs/maintainers/loader_and_catalog.md) and run:
 
 ```bash
+python3 tools/check_loader_catalog_sync.py --self-test
 python3 tools/check_loader_catalog_sync.py
 ```
 
+Do not leave a live Hugging Face `SnapshotSource` for a loader that is commented out of `registry.cpp` — mark it `UnsupportedSource` (or remove it) and update the README package table.
 Good follow-up work for existing model families includes:
 
 - Better CLI or server examples
