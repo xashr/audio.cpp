@@ -1305,6 +1305,35 @@
       ]
     },
     {
+      "id": "omnivoice_streaming_voice_clone",
+      "coverage": "OmniVoice pseudo-streaming TTS path with text chunk events, reference clone conditioning, generator chunking, and final merged audio",
+      "family": "omnivoice",
+      "model": "models/OmniVoice",
+      "task": "tts",
+      "mode": "streaming",
+      "outputs": [
+        "audio",
+        "named_audio"
+      ],
+      "requests": [
+        {
+          "id": "streaming_clone",
+          "text": "OmniVoice pseudo streaming should emit one audio event per text chunk while preserving the same reference speaker and final merged result.",
+          "language": "en",
+          "voice_ref": "resources/a.wav",
+          "reference_text": "This little work was finished in the year eighteen o three, and intended for immediate publication.",
+          "options": {
+            "text_chunk_size": 48,
+            "text_chunk_mode": "tag_aware",
+            "audio_chunk_duration": 15.0
+          },
+          "seed": 1234,
+          "guidance_scale": 2.0,
+          "num_inference_steps": 16
+        }
+      ]
+    },
+    {
       "id": "pocket_tts_long_short_long",
       "coverage": "PocketTTS text conditioner, voice conditioner, flow LM, Mimi decoder chunk/reuse path",
       "family": "pocket_tts",

@@ -7,7 +7,7 @@
 | MioTTS | `miotts` | `tts` | [MioTTS](#miotts) |
 | MOSS-TTS-Local | `moss_tts_local` | `tts`, `clon` | [MOSS-TTS-Local](#moss-tts-local) |
 | MOSS-TTS-Nano | `moss_tts_nano` | `tts`, `clon` | [MOSS-TTS-Nano](#moss-tts-nano) |
-| OmniVoice | `omnivoice` | `tts` | [OmniVoice](#omnivoice) |
+| OmniVoice | `omnivoice` | `tts` | [OmniVoice](#omnivoice), [full guide](models/omnivoice.md) |
 | PocketTTS | `pocket_tts` | `tts` | [PocketTTS](#pockettts) |
 | VoxCPM2 | `voxcpm2` | `tts`, `vdes` | [VoxCPM2](#voxcpm2) |
 | Higgs Audio v3 TTS | `higgs_audio_tts` | `tts` | [Higgs Audio v3 TTS](#higgs-audio-v3-tts) |
@@ -171,14 +171,14 @@ audiocpp_cli --task clon --family moss_tts_nano --model /path/to/MOSS-TTS-Nano-1
 
 ## OmniVoice
 
-OmniVoice supports multilingual TTS, voice cloning, voice design, and non-verbal tag tokens. The integration exposes both reference-audio cloning and instruction-based voice design.
+OmniVoice supports multilingual TTS, voice cloning, voice design, non-verbal tag tokens, long-form chunking, and chunked pseudo-streaming. See [OmniVoice](models/omnivoice.md) for the full guide.
 
 | Field | Value |
 |---|---|
 | Family | `omnivoice` |
 | Model directory | `models/OmniVoice` |
 | Task | `tts` |
-| Modes | `offline` |
+| Modes | `offline`, `streaming` |
 | Languages | 600+ languages handled by the model |
 | Voice input | `--voice-ref` plus optional `--reference-text`, or instruction text through `--instruct` |
 | Built-in voices | Auto voice is supported by the model; CLI examples use clone or design for repeatability |
@@ -195,26 +195,13 @@ Voice design:
 audiocpp_cli --task tts --family omnivoice --model models/OmniVoice --backend cuda --text "Hello from OmniVoice." --instruct "female, young adult, moderate pitch" --out out.wav
 ```
 
-Non-verbal tags are written directly in `--text`. Supported tag spellings include `[laughter]`, `[sigh]`, `[confirmation-en]`, `[question-en]`, `[question-ah]`, `[question-oh]`, `[question-ei]`, `[question-yi]`, `[surprise-ah]`, `[surprise-oh]`, `[surprise-wa]`, `[surprise-yo]`, and `[dissatisfaction-hnn]`.
+Streaming voice clone:
 
-| Option | Values | Default | Meaning |
-|---|---|---:|---|
-| `--voice-ref` | WAV path | not set | Reference speaker audio for cloning. |
-| `--reference-text` | text | empty string | Transcript for reference audio. |
-| `--instruct` | text | empty string | Voice-design instruction. |
-| `--text-chunk-size` | integer chars | disabled | Optional framework text chunking. |
-| `--text-chunk-mode` | `default`, `tag_aware`, `japanese`, `endline` | `tag_aware` | Framework text chunking mode used only when `--text-chunk-size` is set. |
-| `--num-inference-steps` | integer | `32` | Decoder diffusion steps. |
-| `--guidance-scale` | float | `2.0` | Decoder CFG strength. |
-| `--request-option speed=<float>` | float | `1.0` | Speech speed multiplier. |
-| `--request-option audio_chunk_duration_seconds=<float>` | seconds | `15.0` | Audio chunk duration used by the model prompt path. |
-| `--request-option audio_chunk_threshold_seconds=<float>` | seconds | `30.0` | Audio length threshold before model-side chunking. |
-| `--session-option omnivoice.mem_saver=true|false` | bool | `false` | Release staged generator and audio-tokenizer runtime graphs after request phases to reduce resident VRAM. Later requests may rebuild released graphs. |
-| `--session-option omnivoice.perf_mode=off|flash_attention` | enum | `off` | Opt-in generator attention mode. `off` keeps the exact-safe path; `flash_attention` can improve CUDA throughput with small output drift. |
+```bash
+audiocpp_cli --task tts --mode streaming --family omnivoice --model models/OmniVoice --backend cuda --text "Hello from OmniVoice." --voice-ref assets/resources/b.wav --reference-text "Some call me nature. Others call me Mother Nature. I've been here for over 4.5 billion years. 22,500 times longer than you." --text-chunk-size 160 --out stream.wav --out-dir stream_chunks
+```
 
-When `--text-chunk-size` is not set, long OmniVoice requests keep the model-specific automatic punctuation chunker controlled by `audio_chunk_duration_seconds` and `audio_chunk_threshold_seconds`.
-
-The `omnivoice.perf_mode=flash_attention` path is intended for performance testing and latency-sensitive runs where high-similarity output drift is acceptable. It is only available on the normal graph path and cannot be combined with `omnivoice.mem_saver=true`.
+OmniVoice streaming is pseudo streaming: audio.cpp emits audio chunk events from text chunks and returns a merged final WAV. Upstream Python does not expose model-native streaming. For server SSE examples, options, and tag controls, see [OmniVoice](models/omnivoice.md).
 
 ## PocketTTS
 

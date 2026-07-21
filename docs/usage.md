@@ -75,6 +75,7 @@ Omit these unless you need explicit control. If `--seed` is omitted, models that
 |---|---|
 | Speech, voice clone, long-form TTS | [tts.md](tts.md) |
 | Music and sound generation | [music_generation.md](music_generation.md) |
+| OmniVoice TTS, voice cloning, voice design, and streaming | [models/omnivoice.md](models/omnivoice.md) |
 | ASR models | [asr.md](asr.md) |
 | VAD and diarization | [speech_analysis.md](speech_analysis.md) |
 | Voice conversion codec and source separation | [audio_tools.md](audio_tools.md) |
