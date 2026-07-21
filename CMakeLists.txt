@@ -348,6 +348,14 @@ add_library(engine_runtime STATIC
     src/models/voxtral_realtime/text_decoder.cpp
     src/models/voxtral_realtime/session.cpp
     src/models/voxtral_realtime/loader.cpp
+    src/models/fish_audio/ar.cpp
+    src/models/fish_audio/assets.cpp
+    src/models/fish_audio/codec.cpp
+    src/models/fish_audio/generator.cpp
+    src/models/fish_audio/loader.cpp
+    src/models/fish_audio/prompt_builder.cpp
+    src/models/fish_audio/session.cpp
+    src/models/fish_audio/tokenizer_text.cpp
     src/models/heartmula/assets.cpp
     src/models/heartmula/codec.cpp
     src/models/heartmula/generator.cpp
@@ -371,6 +379,15 @@ add_library(engine_runtime STATIC
     src/models/higgs_audio_stt/postprocess.cpp
     src/models/higgs_audio_stt/session.cpp
     src/models/higgs_audio_stt/loader.cpp
+    src/models/higgs_audio_tts/ar.cpp
+    src/models/higgs_audio_tts/assets.cpp
+    src/models/higgs_audio_tts/codec.cpp
+    src/models/higgs_audio_tts/codebooks.cpp
+    src/models/higgs_audio_tts/generator.cpp
+    src/models/higgs_audio_tts/loader.cpp
+    src/models/higgs_audio_tts/sampler.cpp
+    src/models/higgs_audio_tts/session.cpp
+    src/models/higgs_audio_tts/tokenizer_text.cpp
     src/models/irodori_tts/assets.cpp
     src/models/irodori_tts/codec.cpp
     src/models/irodori_tts/condition_encoder.cpp
@@ -730,6 +747,7 @@ if (ENGINE_BUILD_WARMBENCH)
     add_engine_warmbench(chatterbox_warm_bench tests/chatterbox/chatterbox_warm_bench.cpp)
     add_engine_warmbench(citrinet_asr_warm_bench tests/citrinet_asr/citrinet_asr_warm_bench.cpp)
     add_engine_warmbench(higgs_audio_stt_warm_bench tests/higgs_audio_stt/higgs_audio_stt_warm_bench.cpp)
+    add_engine_warmbench(higgs_audio_tts_warm_bench tests/higgs_audio_tts/higgs_audio_tts_warm_bench.cpp)
     add_engine_warmbench(hviske_asr_warm_bench tests/hviske_asr/hviske_asr_warm_bench.cpp)
     add_engine_warmbench(index_tts2_warm_bench tests/index_tts2/index_tts2_warm_bench.cpp)
     add_engine_warmbench(irodori_tts_warm_bench tests/irodori_tts/irodori_tts_warm_bench.cpp)
@@ -886,6 +904,16 @@ if (ENGINE_BUILD_TESTS)
     add_test(
         NAME encoder_module_test
         COMMAND encoder_module_test
+    )
+
+    add_engine_unittest(
+        qwen_decoder_packed_projection_test
+        tests/unittests/test_qwen_decoder_packed_projections.cpp
+    )
+
+    add_test(
+        NAME qwen_decoder_packed_projection_test
+        COMMAND qwen_decoder_packed_projection_test
     )
 
     add_engine_unittest(conv_transpose_fast_path_test tests/unittests/test_conv_transpose_fast_path.cpp)

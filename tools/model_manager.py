@@ -107,6 +107,7 @@ class SnapshotSource:
     include_prefixes: tuple[str, ...] = ()
     include_suffixes: tuple[str, ...] = ()
     exclude_prefixes: tuple[str, ...] = ()
+    strip_prefix: str = ""
 
 
 @dataclasses.dataclass(frozen=True)
@@ -149,6 +150,7 @@ class ModelPackage:
     standalone: bool | None = None
     parent_package_id: str | None = None
     tasks: tuple[str, ...] = ()
+    modes: tuple[str, ...] = ()
     gated: bool | None = None
 
 
@@ -215,22 +217,6 @@ CATALOG: tuple[ModelPackage, ...] = (
             "acestep-v15-turbo/silence_latent.safetensors",
             "vae/diffusion_pytorch_model.safetensors",
         ),
-    ),
-    ModelPackage(
-        id="kokoro_82m_bf16",
-        display_name="Kokoro 82M bf16",
-        target_directory="Kokoro-82M-bf16",
-        source=UnsupportedSource(
-            reason=(
-                "kokoro_tts loader is not registered in this release tree yet "
-                "(commented out in src/framework/runtime/registry.cpp). "
-                "Re-enable the loader, add model_specs/kokoro_tts.json, then "
-                "restore a SnapshotSource here."
-            ),
-        ),
-        required_files=("config.json", "kokoro-v1_0.safetensors", "voices/af_heart.safetensors"),
-        family="kokoro_tts",
-        tasks=("tts",),
     ),
     ModelPackage(
         id="moss_tts_nano_100m",
@@ -396,30 +382,32 @@ CATALOG: tuple[ModelPackage, ...] = (
     ),
     ModelPackage(
         id="voxtral_realtime",
-        display_name="Voxtral Mini 4B Realtime",
-        target_directory="Voxtral-Mini-4B-Realtime-2602",
+        display_name="Voxtral Mini 4B Realtime GGUF",
+        target_directory="Voxtral-Mini-4B-Realtime-2602-GGUF",
         source=SnapshotSource(
-            repo_id="mistralai/Voxtral-Mini-4B-Realtime-2602",
-            include_prefixes=(
-                "config.json",
-                "generation_config.json",
-                "model.safetensors",
-                "params.json",
-                "processor_config.json",
-                "tekken.json",
-            ),
+            repo_id="audio-cpp/audio.cpp-gguf",
+            include_prefixes=("Voxtral-Mini-4B-Realtime-2602-GGUF/voxtral-mini-4b-realtime-2602-q8_0.gguf",),
+            strip_prefix="Voxtral-Mini-4B-Realtime-2602-GGUF/",
         ),
-        required_files=(
-            "config.json",
-            "generation_config.json",
-            "model.safetensors",
-            "params.json",
-            "processor_config.json",
-            "tekken.json",
-        ),
+        required_files=("voxtral-mini-4b-realtime-2602-q8_0.gguf",),
         family="voxtral_realtime",
         tasks=("asr",),
-        description="Native Hugging Face checkpoint for Voxtral realtime ASR; no conversion is required.",
+        modes=("offline", "streaming"),
+        description="Standalone audio.cpp Q8_0 GGUF package for Voxtral realtime ASR.",
+    ),
+    ModelPackage(
+        id="fish_audio_s2_pro",
+        display_name="Fish Audio S2 Pro GGUF",
+        target_directory="Fish-Audio-S2-Pro-GGUF",
+        source=SnapshotSource(
+            repo_id="audio-cpp/audio.cpp-gguf",
+            include_prefixes=("Fish-Audio-S2-Pro-GGUF/fish-audio-s2-pro-q8_0.gguf",),
+            strip_prefix="Fish-Audio-S2-Pro-GGUF/",
+        ),
+        required_files=("fish-audio-s2-pro-q8_0.gguf",),
+        family="fish_audio",
+        tasks=("tts",),
+        description="Standalone audio.cpp Q8_0 GGUF package for Fish Audio S2 Pro.",
     ),
     ModelPackage(
         id="higgs_audio_stt",
@@ -604,22 +592,6 @@ CATALOG: tuple[ModelPackage, ...] = (
         target_directory="diar_sortformer_4spk-v1",
         source=SnapshotSource(repo_id="nvidia/diar_sortformer_4spk-v1"),
         required_files=("config.json", "model.safetensors", "processor_config.json"),
-    ),
-    ModelPackage(
-        id="parakeet_tdt_0_6b_v3",
-        display_name="Parakeet TDT 0.6B v3",
-        target_directory="parakeet-tdt-0.6b-v3",
-        source=UnsupportedSource(
-            reason=(
-                "parakeet_tdt loader is not registered in this release tree yet "
-                "(commented out in src/framework/runtime/registry.cpp). "
-                "Re-enable the loader, add model_specs/parakeet_tdt.json, then "
-                "restore a SnapshotSource here."
-            ),
-        ),
-        required_files=("config.json", "model.safetensors", "processor_config.json", "tokenizer.json"),
-        family="parakeet_tdt",
-        tasks=("asr",),
     ),
     ModelPackage(
         id="pocket_tts",
@@ -844,27 +816,17 @@ CATALOG: tuple[ModelPackage, ...] = (
     ),
     ModelPackage(
         id="higgs_audio_v3_tts_4b",
-        display_name="Higgs Audio v3 TTS 4B",
-        target_directory="higgs-audio-v3-tts-4b",
-        source=UnsupportedSource(
-            reason=(
-                "higgs_tts / higgs_audio_tts loader is not registered in this "
-                "release tree yet (commented out in "
-                "src/framework/runtime/registry.cpp). Re-enable the loader with "
-                "one consistent family id, add the matching model_specs entry, "
-                "then restore a SnapshotSource here."
-            ),
+        display_name="Higgs Audio v3 TTS 4B GGUF",
+        target_directory="Higgs-Audio-v3-TTS-4B-GGUF",
+        source=SnapshotSource(
+            repo_id="audio-cpp/audio.cpp-gguf",
+            include_prefixes=("Higgs-Audio-v3-TTS-4B-GGUF/higgs-audio-v3-tts-4b-q8_0.gguf",),
+            strip_prefix="Higgs-Audio-v3-TTS-4B-GGUF/",
         ),
-        required_files=(
-            "chat_template.jinja",
-            "config.json",
-            "model.safetensors.index.json",
-            "model.safetensors",
-            "tokenizer.json",
-            "tokenizer_config.json",
-        ),
+        required_files=("higgs-audio-v3-tts-4b-q8_0.gguf",),
         family="higgs_audio_tts",
         tasks=("tts",),
+        description="Standalone audio.cpp Q8_0 GGUF package for Higgs Audio v3 TTS 4B.",
     ),
     ModelPackage(
         id="heartmula",
@@ -1403,7 +1365,7 @@ def _default_tasks_from_family(family: str) -> list[str]:
         return []
     if "forced_aligner" in key or key.endswith("_aligner") or key.endswith("_align"):
         return ["align"]
-    if key.endswith("_asr") or key.endswith("_stt") or key in {"parakeet_tdt", "whisper", "voxtral_realtime"}:
+    if key.endswith("_asr") or key.endswith("_stt") or key in {"whisper", "voxtral_realtime"}:
         return ["asr"]
     if "vad" in key:
         return ["vad"]
@@ -1420,8 +1382,6 @@ def _default_tasks_from_family(family: str) -> list[str]:
     if key.endswith("_asr") or key.endswith("_stt"):
         return ["asr"]
     if "tts" in key or key in {
-        "kokoro",
-        "kokoro_tts",
         "chatterbox",
         "voxcpm2",
         "omnivoice",
@@ -1484,6 +1444,7 @@ def package_payload(package: ModelPackage) -> dict[str, object]:
             "include_prefixes": list(source.include_prefixes),
             "include_suffixes": list(source.include_suffixes),
             "exclude_prefixes": list(source.exclude_prefixes),
+            "strip_prefix": source.strip_prefix,
         }
         installable = True
     elif isinstance(source, CompositeSnapshotSource):
@@ -1498,6 +1459,7 @@ def package_payload(package: ModelPackage) -> dict[str, object]:
                     "include_prefixes": list(placement.source.include_prefixes),
                     "include_suffixes": list(placement.source.include_suffixes),
                     "exclude_prefixes": list(placement.source.exclude_prefixes),
+                    "strip_prefix": placement.source.strip_prefix,
                 }
                 for placement in source.placements
             ],
@@ -1539,7 +1501,7 @@ def package_payload(package: ModelPackage) -> dict[str, object]:
         "source": source_payload,
         "family": family,
         "tasks": tasks,
-        "modes": ["offline"] if tasks else [],
+        "modes": list(package.modes) if package.modes else (["offline"] if tasks else []),
         "standalone": standalone,
         "parent_package_id": parent_package_id,
         "gated": _package_is_gated(package),
@@ -1577,11 +1539,22 @@ def http_json(url: str) -> object:
         return json.load(response)
 
 
-def list_hf_files(source: SnapshotSource) -> list[tuple[str, int | None]]:
+def local_snapshot_path(source: SnapshotSource, remote_path: str) -> str:
+    if not source.strip_prefix:
+        return remote_path
+    if not remote_path.startswith(source.strip_prefix):
+        raise RuntimeError(f"snapshot path does not start with strip_prefix: {remote_path}")
+    local_path = remote_path[len(source.strip_prefix):]
+    if not local_path:
+        raise RuntimeError(f"snapshot strip_prefix removed full path: {remote_path}")
+    return local_path
+
+
+def list_hf_files(source: SnapshotSource) -> list[tuple[str, str, int | None]]:
     payload = http_json(hf_tree_url(source))
     if not isinstance(payload, list):
         raise RuntimeError(f"unexpected HuggingFace tree payload for {source.repo_id}")
-    files: list[tuple[str, int | None]] = []
+    files: list[tuple[str, str, int | None]] = []
     for entry in payload:
         if not isinstance(entry, dict):
             continue
@@ -1596,7 +1569,7 @@ def list_hf_files(source: SnapshotSource) -> list[tuple[str, int | None]]:
         if any(path.startswith(prefix) for prefix in source.exclude_prefixes):
             continue
         size = entry.get("size")
-        files.append((path, size if isinstance(size, int) else None))
+        files.append((path, local_snapshot_path(source, path), size if isinstance(size, int) else None))
     if not files:
         raise RuntimeError(f"no installable files found for {source.repo_id}")
     return files
@@ -1647,11 +1620,11 @@ def install_snapshot_into_dir(
     validate: bool = True,
 ) -> None:
     files = list_hf_files(source)
-    for relative, expected_size in files:
+    for remote, relative, expected_size in files:
         destination = destination_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
-        print(f"download {relative}")
-        download_file(hf_resolve_url(source, relative), destination, expected_size)
+        print(f"download {remote}")
+        download_file(hf_resolve_url(source, remote), destination, expected_size)
     if validate:
         validate_required_files_list(required_files, destination_root, source.repo_id)
 
