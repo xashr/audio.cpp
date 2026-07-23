@@ -1,6 +1,6 @@
 #include "components/component_weights.h"
 
-#include "engine/framework/modules/hift_vocoder.h"
+#include "engine/framework/modules/vocoders/hift_vocoder.h"
 
 #include <cmath>
 #include <numeric>

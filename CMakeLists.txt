@@ -179,6 +179,7 @@ add_library(engine_runtime STATIC
     src/framework/decoders/tdt_decoder_greedy_duration_loop.cpp
     src/framework/decoders/tdt_decoder_greedy_separate_heads.cpp
     src/framework/modules/linear_module.cpp
+    src/framework/modules/packed_linear_weights.cpp
     src/framework/modules/primitive_modules.cpp
     src/framework/modules/activation_modules.cpp
     src/framework/modules/norm_modules.cpp
@@ -186,12 +187,13 @@ add_library(engine_runtime STATIC
     src/framework/modules/structural_modules.cpp
     src/framework/modules/asr_helpers.cpp
     src/framework/modules/conv_modules.cpp
-    src/framework/modules/whisper_embedding.cpp
-    src/framework/modules/campplus_encoder.cpp
-    src/framework/modules/bigvgan_vocoder.cpp
-    src/framework/modules/hift_vocoder.cpp
-    src/framework/modules/hubert_encoder.cpp
-    src/framework/modules/wavlm_encoder.cpp
+    src/framework/modules/speech_encoders/whisper_embedding.cpp
+    src/framework/modules/speech_encoders/whisper_frontend.cpp
+    src/framework/modules/speech_encoders/campplus_encoder.cpp
+    src/framework/modules/vocoders/bigvgan_vocoder.cpp
+    src/framework/modules/vocoders/hift_vocoder.cpp
+    src/framework/modules/speech_encoders/hubert_encoder.cpp
+    src/framework/modules/speech_encoders/wavlm_encoder.cpp
     src/framework/modules/optimizations/fast_conv_modules.cpp
     src/framework/modules/optimizations/fast_projection_modules.cpp
     src/framework/modules/recurrent_modules.cpp
@@ -206,8 +208,8 @@ add_library(engine_runtime STATIC
     src/framework/modules/attention/scaled_dot_product_attention.cpp
     src/framework/modules/attention/grouped_query_attention.cpp
     src/framework/modules/attention/streaming_frame_attention_cache.cpp
-    src/framework/modules/attention/qwen_decoder.cpp
-    src/framework/modules/attention/qwen_causal_decoder.cpp
+    src/framework/modules/transformers/qwen_decoder.cpp
+    src/framework/modules/transformers/qwen_causal_decoder.cpp
     src/framework/modules/attention/cross_attention.cpp
     src/framework/modules/attention/transformer_blocks.cpp
     src/framework/modules/conditioning_modules.cpp
@@ -240,8 +242,8 @@ add_library(engine_runtime STATIC
     src/framework/audio/wav_reader.cpp
     src/framework/audio/wav_writer.cpp
     src/framework/audio/zipenhancer.cpp
-    src/framework/modules/ecapa_tdnn_runtime.cpp
-    src/framework/modules/titanet_runtime.cpp
+    src/framework/modules/speaker_encoders/ecapa_tdnn_runtime.cpp
+    src/framework/modules/speaker_encoders/titanet_runtime.cpp
     src/framework/codecs/neural_audio.cpp
     src/framework/sampling/decode_modules.cpp
     src/framework/sampling/diffusion_math.cpp

@@ -1,4 +1,4 @@
-#include "engine/framework/modules/hift_vocoder.h"
+#include "engine/framework/modules/vocoders/hift_vocoder.h"
 
 #include "engine/framework/assets/tensor_source.h"
 #include "engine/framework/audio/dsp.h"
