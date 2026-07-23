@@ -4,10 +4,11 @@
 layout, downloads, UI hints, CLI options, runtime capabilities, and companion
 models.
 
-Specs without `schema_version` are legacy source-layout specs. New or migrated
-specs should use `schema_version: 1`.
+The only accepted spec shapes are the current source-layout specs already used
+by production models, and the typed schema shown here for new metadata/catalog
+work.
 
-## Schema V1
+## Typed Schema
 
 Top-level fields:
 
@@ -23,7 +24,7 @@ Top-level fields:
 | `runtime` | Runtime tags and default package format. |
 | `capabilities` | Stable capability booleans and language hints. |
 | `options` | Typed request/session/load options. |
-| `packages` | Installable model packages and download sources. |
+| `packages` | Installable model packages and download metadata. |
 | `layouts` | Resource/tensor layouts used by packages. |
 | `companions` | Runtime peer models or external resources. |
 | `ui` | UI/catalog hints. |
@@ -35,11 +36,13 @@ Common options must use canonical names such as `seed`, `language`,
 
 Model-specific options must be namespaced as `<family>.<name>`.
 
-Supported package source kinds are `huggingface_snapshot`, `local_snapshot`,
-`composite_snapshot`, `converter`, and `unsupported`.
+`packages[].download` describes where an installer or UI can get a ready-to-use
+package. Supported download kinds are `huggingface_snapshot`, `local_snapshot`,
+`converter`, and `unsupported`. Public packages should be ready-to-use HF repos
+or standalone GGUF packages.
 
 The C++ `framework/model_spec` subsystem is the authoritative schema gate.
-`audiocpp_cli`, `audiocpp_server`, and GGUF loading fail when a typed v1 field
+`audiocpp_cli`, `audiocpp_server`, and GGUF loading fail when a typed schema field
 is invalid.
 
 Run the toy C++ demo through the production subsystem:
@@ -49,6 +52,14 @@ cmake --build build/debug --target model_spec_demo --parallel $(nproc)
 build/debug/bin/model_spec_demo \
   examples/model_spec_demo/specs/toy_qwen3_asr.json \
   examples/model_spec_demo/toy_package
+```
+
+Preview package download plans from the same validated spec:
+
+```bash
+cmake --build build/debug --target model_spec_download_demo --parallel $(nproc)
+build/debug/bin/model_spec_download_demo \
+  examples/model_spec_demo/specs/toy_qwen3_asr.json
 ```
 
 The toy browser UI reads `examples/model_spec_demo/specs/toy_qwen3_asr.json`

@@ -92,9 +92,9 @@ const std::unordered_set<std::string> & precisions() {
     return values;
 }
 
-const std::unordered_set<std::string> & source_kinds() {
+const std::unordered_set<std::string> & download_kinds() {
     static const std::unordered_set<std::string> values = {
-        "huggingface_snapshot", "local_snapshot", "composite_snapshot", "converter", "unsupported",
+        "huggingface_snapshot", "local_snapshot", "converter", "unsupported",
     };
     return values;
 }
@@ -221,7 +221,7 @@ void validate_runtime(const json::Value & value, std::string_view path) {
     }
 }
 
-void validate_hf_snapshot_source(const json::Value & value, std::string_view path) {
+void validate_hf_snapshot_download(const json::Value & value, std::string_view path) {
     require_spec_object(value, path);
     (void) require_spec_string(require_spec_field(value, "repo", path), std::string(path) + ".repo");
     if (const auto * revision = value.find("revision")) {
@@ -240,32 +240,16 @@ void validate_hf_snapshot_source(const json::Value & value, std::string_view pat
     }
 }
 
-void validate_source(const json::Value & value, std::string_view path) {
+void validate_download(const json::Value & value, std::string_view path) {
     require_spec_object(value, path);
     const auto kind = require_spec_string(require_spec_field(value, "kind", path), std::string(path) + ".kind");
-    validate_enum(kind, source_kinds(), std::string(path) + ".kind", "source kind");
+    validate_enum(kind, download_kinds(), std::string(path) + ".kind", "download kind");
     if (kind == "huggingface_snapshot") {
-        validate_hf_snapshot_source(value, path);
+        validate_hf_snapshot_download(value, path);
     } else if (kind == "local_snapshot") {
         (void) require_spec_string(require_spec_field(value, "path", path), std::string(path) + ".path");
         if (const auto * array = value.find("include")) {
             validate_string_array(*array, nullptr, std::string(path) + ".include", "include");
-        }
-    } else if (kind == "composite_snapshot") {
-        const auto placements_path = std::string(path) + ".placements";
-        const auto & placements_field = require_spec_field(value, "placements", path);
-        const auto & placements = require_spec_array(placements_field, placements_path);
-        for (size_t index = 0; index < placements.size(); ++index) {
-            const auto placement_path = std::string(path) + ".placements[" + std::to_string(index) + "]";
-            const auto & placement = placements[index];
-            require_spec_object(placement, placement_path);
-            if (const auto * target = placement.find("target_subdir")) {
-                (void) require_spec_string(*target, placement_path + ".target_subdir");
-            }
-            validate_hf_snapshot_source(require_spec_field(placement, "source", placement_path), placement_path + ".source");
-            if (const auto * required = placement.find("required_files")) {
-                validate_string_array(*required, nullptr, placement_path + ".required_files", "required file");
-            }
         }
     } else if (kind == "converter") {
         (void) require_spec_string(require_spec_field(value, "converter", path), std::string(path) + ".converter");
@@ -351,7 +335,7 @@ void validate_package(const json::Value & value, const json::Value::Object & lay
         fail(std::string(path) + ".layout",
              "package format '" + format + "' does not match layout format '" + layout_format + "'");
     }
-    validate_source(require_spec_field(value, "source", path), std::string(path) + ".source");
+    validate_download(require_spec_field(value, "download", path), std::string(path) + ".download");
     if (const auto * description = value.find("description")) {
         (void) require_spec_string(*description, std::string(path) + ".description");
     }

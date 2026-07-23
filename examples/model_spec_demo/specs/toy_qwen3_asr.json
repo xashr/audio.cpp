@@ -60,12 +60,77 @@
       "target_directory": "Toy-Qwen3-ASR",
       "required_files": ["config.json", "generation_config.json", "tokenizer_config.json", "model.safetensors"],
       "layout": "safetensors",
-      "source": {
+      "download": {
         "kind": "local_snapshot",
         "path": "../toy_package",
         "include": ["config.json", "generation_config.json", "tokenizer_config.json", "model.safetensors"]
       },
       "description": "Local toy package used by the model spec demo."
+    },
+    {
+      "id": "toy_qwen3_asr_hf_snapshot",
+      "display_name": "Toy Qwen3 ASR HF Snapshot",
+      "format": "safetensors",
+      "precision": "native",
+      "target_directory": "Toy-Qwen3-ASR-HF",
+      "required_files": ["config.json", "generation_config.json", "tokenizer_config.json", "model.safetensors"],
+      "layout": "safetensors",
+      "download": {
+        "kind": "huggingface_snapshot",
+        "repo": "audio-cpp/toy-qwen3-asr",
+        "revision": "main",
+        "include": ["config.json", "generation_config.json", "tokenizer_config.json", "model.safetensors"],
+        "exclude": ["*.md", "*.png"],
+        "gated": false
+      },
+      "description": "Fake direct Hugging Face snapshot package."
+    },
+    {
+      "id": "toy_qwen3_asr_gguf_q8",
+      "display_name": "Toy Qwen3 ASR GGUF Q8",
+      "format": "gguf",
+      "precision": "q8_0",
+      "target_directory": "Toy-Qwen3-ASR-GGUF",
+      "required_files": ["toy-qwen3-asr-q8_0.gguf"],
+      "layout": "gguf",
+      "download": {
+        "kind": "huggingface_snapshot",
+        "repo": "audio-cpp/audio.cpp-gguf",
+        "revision": "main",
+        "include": ["Toy-Qwen3-ASR-GGUF/toy-qwen3-asr-q8_0.gguf"],
+        "strip_prefix": "Toy-Qwen3-ASR-GGUF",
+        "gated": false
+      },
+      "description": "Fake standalone GGUF package with an embedded spec."
+    },
+    {
+      "id": "toy_qwen3_asr_convert_q8",
+      "display_name": "Toy Qwen3 ASR Convert to GGUF Q8",
+      "format": "gguf",
+      "precision": "q8_0",
+      "target_directory": "Toy-Qwen3-ASR-GGUF-Q8",
+      "required_files": ["toy-qwen3-asr-q8_0.gguf"],
+      "layout": "gguf",
+      "download": {
+        "kind": "converter",
+        "converter": "audiocpp_gguf",
+        "description": "Download the safetensors package first, then convert it to q8_0 GGUF."
+      },
+      "description": "Fake generated package for converter-driven installs."
+    },
+    {
+      "id": "toy_qwen3_asr_manual",
+      "display_name": "Toy Qwen3 ASR Manual Package",
+      "format": "safetensors",
+      "precision": "native",
+      "target_directory": "Toy-Qwen3-ASR-Manual",
+      "required_files": ["config.json", "model.safetensors"],
+      "layout": "safetensors",
+      "download": {
+        "kind": "unsupported",
+        "reason": "Manual license approval is required before download."
+      },
+      "description": "Fake package that a downloader should list but not install automatically."
     }
   ],
   "layouts": {
@@ -84,6 +149,19 @@
       },
       "tensors": {
         "weights": "model:model.safetensors"
+      }
+    },
+    "gguf": {
+      "format": "gguf",
+      "roots": {
+        "model": ".",
+        "weights": "$gguf"
+      },
+      "files": {
+        "config": "model:config.json"
+      },
+      "tensors": {
+        "weights": "weights:"
       }
     }
   },

@@ -149,7 +149,8 @@
         ...model.modes,
         ...model.runtime_tags,
         ...model.tags,
-        ...model.packages.map((pkg) => `${pkg.id} ${pkg.display_name} ${pkg.format} ${pkg.precision}`)
+        ...model.packages.map((pkg) =>
+          `${pkg.id} ${pkg.display_name} ${pkg.format} ${pkg.precision} ${pkg.download_kind} ${pkg.download_target}`)
       ].join(" ").toLowerCase();
     }
 
@@ -178,6 +179,7 @@
             <td>
               <div><code>${model.recommended_package}</code></div>
               <div class="meta">${recommended ? `${recommended.format} ${recommended.precision}` : ""}</div>
+              <div class="packages">${recommended ? `${recommended.download_kind}: ${recommended.download_target}` : ""}</div>
             </td>
             <td>${model.docs.map((doc) => `<div><code>${doc}</code></div>`).join("")}</td>
           </tr>
@@ -215,13 +217,18 @@
         tags: spec.ui.tags || [],
         docs: spec.ui.docs || [],
         summary: spec.ui.summary || "",
-        packages: packages.map((pkg) => ({
+        packages: packages.map((pkg) => {
+          const download = pkg.download || {};
+          return {
           id: pkg.id,
           display_name: pkg.display_name,
           format: pkg.format,
           precision: pkg.precision,
-          target_directory: pkg.target_directory
-        }))
+          target_directory: pkg.target_directory,
+          download_kind: download.kind || "",
+          download_target: download.repo || download.path || download.converter || download.reason || ""
+          };
+        })
       };
     }
 
