@@ -679,22 +679,6 @@ if (ENGINE_ENABLE_OPENMP)
     target_link_libraries(model_perf PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
-add_executable(model_spec_demo
-    examples/model_spec_demo/model_spec_demo.cpp
-)
-target_link_libraries(model_spec_demo PRIVATE engine_runtime ggml)
-if (ENGINE_ENABLE_OPENMP)
-    target_link_libraries(model_spec_demo PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
-add_executable(model_spec_download_demo
-    examples/model_spec_demo/model_spec_download_demo.cpp
-)
-target_link_libraries(model_spec_download_demo PRIVATE engine_runtime ggml)
-if (ENGINE_ENABLE_OPENMP)
-    target_link_libraries(model_spec_download_demo PRIVATE OpenMP::OpenMP_CXX)
-endif()
-
 add_executable(miocodec_wavlm_parity
     tests/miocodec/miocodec_wavlm_parity.cpp
 )
@@ -1054,4 +1038,20 @@ if (ENGINE_BUILD_EXAMPLES)
     )
 
     target_link_libraries(ggml_simple_inference PRIVATE ggml)
+
+    add_executable(model_spec_demo
+        examples/model_spec_demo/model_spec_demo.cpp
+    )
+    target_link_libraries(model_spec_demo PRIVATE engine_runtime ggml)
+    if (ENGINE_ENABLE_OPENMP)
+        target_link_libraries(model_spec_demo PRIVATE OpenMP::OpenMP_CXX)
+    endif()
+
+    add_executable(model_spec_download_demo
+        examples/model_spec_demo/model_spec_download_demo.cpp
+    )
+    target_link_libraries(model_spec_download_demo PRIVATE engine_runtime ggml)
+    if (ENGINE_ENABLE_OPENMP)
+        target_link_libraries(model_spec_download_demo PRIVATE OpenMP::OpenMP_CXX)
+    endif()
 endif()
