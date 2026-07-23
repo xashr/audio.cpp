@@ -22,7 +22,7 @@ static bool backend_has_reg_name(ggml_backend_t backend, const char * name) {
     ggml_backend_dev_t device = ggml_backend_get_device(backend);
     if (device == nullptr) return false;
     ggml_backend_reg_t reg = ggml_backend_dev_backend_reg(device);
-    return reg != nullptr && ggml_backend_reg_name(reg) == name;
+    return reg != nullptr && std::strcmp(ggml_backend_reg_name(reg), name) == 0;
 }
 
 bool is_cuda_backend_handle(ggml_backend_t backend) {
@@ -78,13 +78,6 @@ ggml_backend_dev_t find_device_by_backend_type(BackendType type, int device_inde
     return nullptr;
 }
 
-bool backend_name_has_prefix(ggml_backend_t backend, const char * prefix) {
-    if (backend == nullptr || prefix == nullptr) {
-        return false;
-    }
-    const char * name = ggml_backend_name(backend);
-    return name != nullptr && std::strncmp(name, prefix, std::strlen(prefix)) == 0;
-}
 
 #ifndef NDEBUG
 bool backend_graph_validation_enabled() {
