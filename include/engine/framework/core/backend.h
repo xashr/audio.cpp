@@ -50,6 +50,8 @@ struct HostGraphPlan {
     ggml_backend_graph_plan_t plan = nullptr;
     ggml_backend_t backend = nullptr;
 
+    ~HostGraphPlan() { reset(); }
+
     bool active() const noexcept { return plan != nullptr; }
     void reset() {
         if (plan != nullptr && backend != nullptr) {
