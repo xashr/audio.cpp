@@ -87,19 +87,17 @@ Examples for Docker, including CUDA and CPU, are available in `examples/docker`.
 
 ### CLI
 
-These examples use `docker run` to run the CLI:
+The **[examples](examples/docker/cli/EXAMPLE.md)** in `examples/docker/cli`
+demonstrate how to run the audio.cpp CLI with `docker run`. The examples include:
 
-#### PocketTTS
-
-Generate speech through the audio.cpp CLI running in Docker.
-See [EXAMPLE.md](examples/docker/cli/EXAMPLE.md) in `examples/docker/cli`.
+- **PocketTTS:** Text-to-Speech
+- **Qwen3-TTS:** Text-to-Speech with Voice Cloning
 
 ### Server
 
-These examples use `docker compose` to run the server:
+The **[examples](examples/docker/server/EXAMPLE.md)** in `examples/docker/server`
+demonstrate how to run the audio.cpp server with `docker compose`. The examples include:
 
-#### PocketTTS
+- **PocketTTS:** Text-to-Speech
+- **Qwen3-TTS:** Text-to-Speech with Voice Cloning
 
-Generate speech through the audio.cpp server running in Docker Compose.
-
-See [EXAMPLE.md](examples/docker/server/EXAMPLE.md) in `examples/docker/server`.
