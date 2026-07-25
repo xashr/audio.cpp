@@ -1,6 +1,6 @@
 # Docker Compose Server
 
-Run the audio.cpp TTS server (as configured in the *-server.json file)
+Run the audio.cpp TTS server as configured in the server JSON files 
 with Docker Compose.
 
 ## PocketTTS

@@ -31,11 +31,11 @@ Run one of:
 ```
 
 See the scripts for details. The scripts reference the published docker image
-and save the generated speech in `output/speech.wav`.
+and save the generated speech to `output/speech.wav`.
 
 ## Qwen3-TTS (with voice cloning)
 
-### 1. Download the PocketTTS model
+### 1. Download the Qwen3-TTS model
 
 Get the Qwen3-TTS-12Hz-1.7B-Base-GGUF q8 model from
 [audio-cpp/audio.cpp-gguf](https://huggingface.co/audio-cpp/audio.cpp-gguf/tree/main/Qwen3-TTS-12Hz-1.7B-Base-GGUF)
@@ -50,7 +50,7 @@ The directory should look like:
 
 ### 2. Add reference audio and transcription
 
-Put an `ref_audio.wav` and `ref_text.txt` in `../references/`.
+Put a `ref_audio.wav` and `ref_text.txt` in `../references/`.
 
 The directory should look like:
 ```

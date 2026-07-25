@@ -1,14 +1,23 @@
 # Running audio.cpp in Docker
 
+## Table of Contents
+
+- [Prerequisites](#prerequisites)
+- [Image Variants](#image-variants)
+- [Published Images](#published-images)
+- [Build Images locally](#build-images-locally)
+- [Usage](#usage)
+- [Examples](#examples)
+
 ## Prerequisites
 
 - Docker must be installed and running on your system.
 - For CUDA:
   - The [NVIDIA container toolkit](https://github.com/NVIDIA/nvidia-container-toolkit) must be installed.
 
-## Images
+## Image Variants
 
-The following image flavors are available:
+The following image variants are available:
 
 - **full**: Provides the main tools **cli** and **server** and test binaries in one image. When running the container, the first argument selects the tool to execute.
 
@@ -21,23 +30,23 @@ The following architectures are supported:
 - **amd64**
 - **arm64**
 
-## Released Images
+## Published Images
 
-New Docker images get released once per day if there are new changes. The images are provided
+Docker images are published daily when new commits are available. The images are provided
 as multiarch images (amd64/arm64).
 
-Pull the latest images via these tags: 
+Pull the latest images using these tags:
 - **cuda12**: `ghcr.io/0xshug0/audio.cpp:full-cuda12`
 - **cuda13**: `ghcr.io/0xshug0/audio.cpp:full-cuda13`
 - **cpu**: `ghcr.io/0xshug0/audio.cpp:full-cpu`
 
 Images for a specific day/commit can be found in the
 [versions](https://github.com/0xShug0/audio.cpp/pkgs/container/audio.cpp/versions?filters%5Bversion_type%5D=tagged)
-history. <br/>
-The format is: `full-<backend>-<date>-<shortsha>`, e.g. `full-cuda12-20260725-db7d2c4 `
+history.
+The format is: `full-<backend>-<date>-<shortsha>`, e.g. `full-cuda12-20260725-db7d2c4`
 
 
-## Build the Image locally
+## Build Images locally
 
 If you would like to build the images locally, you can use the available
 Dockerfiles in `.devops`.
@@ -47,13 +56,13 @@ Dockerfiles in `.devops`.
 Build with the default CUDA 12.x version. See `.devops/cuda.Dockerfile`.
 
 ```bash
-docker build -f .devops/cuda.Dockerfile -t local/audio.cpp:full-cuda .
+docker build -f .devops/cuda.Dockerfile -t local/audio.cpp:full-cuda12 .
 ```
 
-Build with a specific CUDA version, for example 13.2.0:
+Build with a specific CUDA version, for example 13.3.0:
 
 ```bash
-docker build -f .devops/cuda.Dockerfile -t local/audio.cpp:full-cuda --build-arg CUDA_VERSION=13.2.0 .
+docker build -f .devops/cuda.Dockerfile -t local/audio.cpp:full-cuda13 --build-arg CUDA_VERSION=13.3.0 .
 ```
 
 ### CPU
