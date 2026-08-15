@@ -25,7 +25,7 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 
 | Workflow | Contents | Status |
 |---|---|---|
-| `ci-linux.yml` | cpu x64/arm64 (build+ctest), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89), HIP container (build-only, gfx1030) | **written, in validation (see §4)** |
+| `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only* ), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | **in final validation (see §4)** |
 | `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF, per llama.cpp note about flaky runners), build+ctest, ccache | TODO (next) |
 | `ci-windows.yml` | windows-2025: cpu (build+ctest), vulkan (SDK install), cuda build-only via `build_windows.ps1` presets | TODO |
 | `ci-nix.yml` | full flake matrix: cpu, vulkan, cuda, rocm, metal (darwin runner), python-scripts | TODO |
@@ -84,12 +84,18 @@ https://github.com/xashr/audio.cpp/actions/runs/31907888528
 | cpu (x64) | ✅ success | includes full ctest |
 | vulkan (x64) | ✅ success | |
 | vulkan (arm64) | ✅ success | |
-| cpu (arm64) | ❌ **failure** | ctest: 7 tests fail — **real arm64 bug, see §6** |
-| HIP/ROCm (x64) | ❌ **failure** | fails at **Build** step (Configure OK, container OK → compile error in HIP code with `rocm/dev-ubuntu-24.04:6.4.4` + `gfx1030`). Fallback: `rocm/dev-ubuntu-22.04:6.1.2` (llama.cpp's proven pin) |
+| cpu (arm64) | ❌ failure | ctest: 7 tests fail — real arm64 bug, see §6 |
+| HIP/ROCm (x64) | ❌ failure | fails at **Build** step (Configure OK, container OK → compile error in HIP code with `rocm/dev-ubuntu-24.04:6.4.4` + `gfx1030`). Fallback: `rocm/dev-ubuntu-22.04:6.1.2` (llama.cpp's proven pin) |
 | CUDA (x64) | ✅ success | container build + link OK (nvidia/cuda:12.6.2, arch 89) |
 
 Job IDs: HIP 95068438156, vulkan-arm64 95068438157, cpu-x64 95068438163, vulkan-x64 95068438169,
 CUDA 95068438173, cpu-arm64 95068438188.
+
+**Resolution (2nd run):** per user decision (2026-08-15): neither failing area was covered by
+the old main workflows (`linux-build.yml` = build-only cpu/vulkan, no ctest, no HIP), so they
+never worked before CI existed → **deferred, not regressions**. `ci-linux.yml` was adjusted:
+arm64 cpu job → build-only (TODO FT-1), HIP job removed (TODO FT-2). Expect the follow-up
+run to be fully green; if so, delete `linux-build.yml` and move to `ci-macos.yml`.
 
 **Log access:** unauthenticated API works for this public repo for run/job/step *status*
 (`GET /repos/xashr/audio.cpp/actions/runs/<id>/jobs`, `/actions/jobs/<id>` includes per-step
@@ -114,7 +120,7 @@ output (they can see it in the UI).
 4. Default branch of the fork is `release-0.1`; irrelevant to the upstream PR; user offered to
    change it but it turned out not to matter (gotcha #1 was the real issue).
 
-## 6. OPEN ISSUE: arm64 test failures (needs next agent)
+## 6. DEFERRED (FT-1): arm64 test failures — future task, no deep dive for now
 
 cpu (arm64) ctest: **7 failures, all pass on x64** (same code/flags):
 `audio_dsp_test`, `rnnoise_utility_test`, `flashsr_utility_test`, `zipenhancer_utility_test`,
@@ -140,7 +146,7 @@ absolute error 0.457663, limit 0.000306
   - vendored ggml NEON kernels: `external/ggml/src/ggml-cpu/simd-gemm.h`, `arch/arm/`,
     `quants.c`, `repack.cpp`
   - RULED OUT: KleidiAI (`GGML_CPU_KLEIDIAI` OFF by default, not enabled by audio.cpp CMake)
-- Next steps (in order):
+- Investigation path (for whoever picks up FT-1, in order):
   1. Get the other 6 tests' failure output from the user (UI) — do they all show the same
      "large error in linear/conv, norms fine" pattern?
   2. Reproduce on arm64: dev machine has no qemu/docker/sudo (checked). Options: user runs
@@ -150,21 +156,38 @@ absolute error 0.457663, limit 0.000306
      on arm64 → if green, it's a ggml NEON kernel bug; if still red, audio.cpp own code
      (FFT header or module lowerings).
   4. This is a **product bug** (published arm64 Docker images affected) → once root-caused,
-     fix + regression test, and file an upstream issue referencing it (see bugs doc).
+     fix + regression test, re-enable `run_tests: true` on the arm64 cpu job, and file an
+     upstream issue referencing it.
 
-## 7. Immediate next steps
+## 7. Future tasks (deferred by user decision 2026-08-15)
 
-1. Diagnose/fix HIP build failure (get log from user; likely fix: pin
-   `rocm/dev-ubuntu-22.04:6.1.2` or adjust compiler flags for 6.4.4).
-3. Diagnose arm64 test failures (§6) — this is the biggest open item.
-4. When ci-linux.yml is fully green: delete `linux-build.yml`, push, verify, then move to
-   `ci-macos.yml` (same testing loop: write → actionlint → local check where possible →
-   push to `ci/**` branch (2nd push if new) → watch jobs).
-5. Remember: before the upstream PR — drop `wip/`, decide on branch protection/required
+The user's rule: parts that were not in the old main workflows (never covered/working) are
+skipped for now and logged here instead of being deep-dived in the CI refactor.
+
+- **FT-1: arm64 ctest — 7 failing audio-math tests** (§6). Blocked: needs arm64 repro.
+  Unblocks: `run_tests: true` on the arm64 cpu job in `ci-linux.yml`.
+- **FT-2: HIP CI job** (bugs doc #6). Needs: build log from user (job UI), then try the
+  `rocm/dev-ubuntu-22.04:6.1.2` pin or 6.4.4 flag fixes. Unblocks: re-adding the `hip` job
+  to `ci-linux.yml` (removed for now; its exact former content is in git history, commit
+  `0fe8845`).
+- **FT-3: sm_75 Docker images** (bugs doc #1) — product issue, file upstream, out of scope
+  for the CI refactor (CI itself uses an explicit arch).
+
+## 8. Immediate next steps
+
+1. Confirm the adjusted `ci-linux.yml` run is fully green (watch the run triggered by the
+   adjustment push on `ci/linux-workflow`).
+2. When green: delete `linux-build.yml`, push, verify (the old mac/windows/nix workflows
+   still run on `ci/**` without path filters — harmless noise until they're removed too).
+3. Continue per-domain: `ci-macos.yml` next (design in §2; same loop: write → actionlint →
+   push to `ci/**` → watch; if mac ctest has new never-covered failures, apply the same
+   defer-and-log policy as FT-1/FT-2), then `ci-windows.yml`, then `ci-nix.yml` (full flake
+   matrix; rocm/metal nix packages were never built in CI → same policy if they fail).
+4. Remember: before the upstream PR — drop `wip/`, decide on branch protection/required
    checks with upstream maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs
    non-required).
 
-## 8. Environment facts (dev machine)
+## 9. Environment facts (dev machine)
 
 - Repo at `/workspace/audio.cpp-fork`; `origin`=`xashr/audio.cpp` (SSH push works),
   `upstream`=`0xShug0/audio.cpp`

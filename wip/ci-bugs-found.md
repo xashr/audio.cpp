@@ -5,7 +5,7 @@ Items marked **[FIXED in branch]** are already handled on the branch; the rest a
 
 ---
 
-## 1. Published Docker CUDA images are effectively sm_75-only  [OPEN — product bug]
+## 1. Published Docker CUDA images are effectively sm_75-only  [OPEN → FT-3 — product bug]
 
 **Symptom:** the daily Docker workflow builds `full-cuda12`/`full-cuda13` images on GPU-less
 GitHub runners. `.devops/cuda.Dockerfile` passes no `CMAKE_CUDA_ARCHITECTURES`, so
@@ -68,7 +68,11 @@ Numerical parity checks (the valuable part) are now unconditional; the timing ga
 
 ---
 
-## 5. 7 ctest failures on arm64 — genuine computation differences  [OPEN — product bug]
+## 5. 7 ctest failures on arm64 — genuine computation differences  [DEFERRED → FT-1 — product bug]
+
+**Status (2026-08-15):** deferred per user decision — the old CI never ran ctest, so this is
+never-covered code, not a regression. The arm64 cpu job in `ci-linux.yml` is build-only until
+this is fixed (TODO marker FT-1 in the workflow). Details/next steps: handoff §6.
 
 CPU CI job on `ubuntu-24.04-arm`: 7 tests fail that pass identically on x64:
 `audio_dsp_test`, `rnnoise_utility_test`, `flashsr_utility_test`, `zipenhancer_utility_test`,
@@ -88,7 +92,11 @@ projection mismatch at 0: expected -0.532126, got -0.989789, absolute error 0.45
 
 ---
 
-## 6. HIP build fails with `rocm/dev-ubuntu-24.04:6.4.4` in CI  [OPEN]
+## 6. HIP build fails with `rocm/dev-ubuntu-24.04:6.4.4` in CI  [DEFERRED → FT-2]
+
+**Status (2026-08-15):** deferred per user decision — HIP was never built in the old CI
+(only nix `engine-rocm` package, never in CI). The `hip` job was removed from
+`ci-linux.yml` until diagnosed (re-adding content is in git history, commit `0fe8845`).
 
 `ci-linux.yml` HIP job: container init + deps + **Configure all succeed**, Build step fails
 (compilation error in the HIP code path; exact error not yet captured — job logs need a token,
