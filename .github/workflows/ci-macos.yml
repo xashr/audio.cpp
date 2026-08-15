@@ -14,6 +14,9 @@
 # (compile-time backend selection only applies to CUDA/Vulkan builds, which
 # this workflow does not enable).
 #
+# OpenMP is OFF: AppleClang has no OpenMP runtime (find_package(OpenMP)
+# fails) - the same workaround the old mac-build.yml used.
+#
 # The old mac-build.yml is kept until this workflow is proven green.
 
 name: CI (macos)
@@ -91,7 +94,9 @@ jobs:
           cmake -S . -B build \
             -DCMAKE_BUILD_TYPE=Release \
             -DENGINE_BUILD_TESTS=ON \
-            -DENGINE_ENABLE_METAL=${{ matrix.enable_metal }}
+            -DENGINE_ENABLE_METAL=${{ matrix.enable_metal }} \
+            -DENGINE_ENABLE_OPENMP=OFF \
+            -DGGML_OPENMP=OFF
 
       - name: Build
         run: |

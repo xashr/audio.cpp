@@ -8,6 +8,8 @@ param(
     [string]$CudaArchitectures = "auto",
     [ValidateSet("", "native", "avx2", "baseline")]
     [string]$CpuArch = "",
+  [ValidateSet("ON", "OFF")]
+    [string]$BuildTests = $null,
     [ValidateSet("ON", "OFF")]
     [string]$NativeCpu = $null,
     [ValidateSet("ON", "OFF")]
@@ -465,6 +467,9 @@ if ($null -ne $cpuArchSettings.Native) {
 }
 if (-not [string]::IsNullOrEmpty($NativeCpu)) {
     $settings.Native = $NativeCpu
+}
+if (-not [string]::IsNullOrEmpty($BuildTests)) {
+    $settings.BuildTests = $BuildTests
 }
 if (-not [string]::IsNullOrEmpty($Llamafile)) {
     $settings.Llamafile = $Llamafile

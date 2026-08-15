@@ -1,12 +1,15 @@
 # CI (windows)
 #
-# Builds and tests the engine on Windows (Visual Studio / MSVC, Ninja):
-#   - cpu:    build + ctest (the Windows CPU job is the only one that runs
-#             tests; vulkan/cuda jobs are build-only, as on Linux)
-#   - vulkan: Vulkan SDK installed via choco, build only
+# Builds and tests the engine on Windows using the project's own
+# scripts/build_windows.ps1 (same as the old windows-build.yml): it locates
+# the MSVC toolset via vswhere and configures compiler/SDK paths explicitly.
+# (Bare `cmake` does not work on the runner: cl is not on PATH, so CMake
+# auto-detects the MinGW cc that ships in the image PATH.)
+#
+#   - cpu:    build + ctest
+#   - vulkan: LunarG SDK installed from a pinned URL, build only
 #   - cuda:   CUDA toolkit preinstalled on the runner image, build only
 #
-# Compiler flags mirror scripts/build_windows.ps1 (/utf-8, MSVC OpenMP).
 # ccache is intentionally not used on Windows (MSVC+ccache works, but it is
 # unproven here; add later if the jobs get slow).
 #
@@ -23,6 +26,7 @@ on:
       - 'ci/**'
     paths:
       - '.github/workflows/ci-windows.yml'
+      - 'scripts/build_windows.ps1'
       - '**/CMakeLists.txt'
       - '**/.cmake'
       - '**/*.h'
@@ -38,6 +42,7 @@ on:
       - dev
     paths:
       - '.github/workflows/ci-windows.yml'
+      - 'scripts/build_windows.ps1'
       - '**/CMakeLists.txt'
       - '**/.cmake'
       - '**/*.h'
@@ -55,6 +60,9 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  VULKAN_SDK_VERSION: 1.4.357.0
+
 jobs:
   build:
     name: ${{ matrix.name }}
@@ -65,60 +73,56 @@ jobs:
       matrix:
         include:
           - name: cpu (x64)
-            enable_vulkan: "OFF"
-            enable_cuda: "OFF"
+            preset: windows-cpu-release
+            build_tests: "ON"
             run_tests: true
+            extra_args: ""
           - name: vulkan (x64)
-            enable_vulkan: "ON"
-            enable_cuda: "OFF"
+            preset: windows-vulkan-release
+            build_tests: "OFF"
             run_tests: false
+            extra_args: ""
           - name: cuda (x64)
-            enable_vulkan: "OFF"
-            enable_cuda: "ON"
+            preset: windows-cuda-release
+            build_tests: "OFF"
             run_tests: false
+            # Explicit arch: the runner has no GPU, so 'auto' (nvidia-smi)
+            # would find nothing and 'native' would fall back to sm_75
+            # (see wip/ci-bugs-found.md #1).
+            extra_args: '-CudaArchitectures 89'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Install dependencies (vulkan)
-        if: ${{ matrix.enable_vulkan == 'ON' }}
+      - name: Install Vulkan SDK
+        if: ${{ matrix.preset == 'windows-vulkan-release' }}
         shell: pwsh
         run: |
-          choco install vulkansdk --no-progress
-          # CMake's FindVulkan picks this up
-          $sdk = Get-ChildItem "C:\VulkanSDK" | Sort-Object Name -Descending | Select-Object -First 1
-          "VULKAN_SDK=$($sdk.FullName)" >> $env:GITHUB_ENV
+          # Pinned official LunarG installer (same approach as llama.cpp's
+          # Windows vulkan CI); installs to C:\VulkanSDK\<version>, which
+          # build_windows.ps1 discovers via VULKAN_SDK.
+          curl.exe -o $env:RUNNER_TEMP\VulkanSDK-Installer.exe -L `
+            "https://sdk.lunarg.com/sdk/download/$env:VULKAN_SDK_VERSION/windows/vulkansdk-windows-X64-$env:VULKAN_SDK_VERSION.exe"
+          & "$env:RUNNER_TEMP\VulkanSDK-Installer.exe" --accept-licenses --default-answer --confirm-command install
+          Add-Content $env:GITHUB_ENV "VULKAN_SDK=C:\VulkanSDK\$env:VULKAN_SDK_VERSION"
+          Add-Content $env:GITHUB_PATH "C:\VulkanSDK\$env:VULKAN_SDK_VERSION\bin"
 
-      - name: Configure
+      - name: Build (all targets)
         shell: pwsh
         run: |
-          $configureArgs = @(
-            "-S", ".", "-B", "build", "-G", "Ninja",
-            "-DCMAKE_BUILD_TYPE=Release",
-            "-DENGINE_BUILD_TESTS=ON",
-            "-DCMAKE_C_FLAGS=/utf-8",
-            "-DCMAKE_CXX_FLAGS=/utf-8 /EHsc",
-            "-DOpenMP_C_FLAGS=/openmp:experimental",
-            "-DOpenMP_CXX_FLAGS=/openmp:experimental",
-            "-DENGINE_ENABLE_VULKAN=${{ matrix.enable_vulkan }}",
-            "-DENGINE_ENABLE_CUDA=${{ matrix.enable_cuda }}"
-          )
-          if ("${{ matrix.enable_cuda }}" -eq "ON") {
-            # Explicit arch: the runner has no GPU, so 'native' would
-            # fall back to sm_75 (see wip/ci-bugs-found.md #1).
-            $configureArgs += "-DCMAKE_CUDA_ARCHITECTURES=89"
+          $extra = @()
+          if ("${{ matrix.extra_args }}" -ne "") {
+            $extra = "${{ matrix.extra_args }}".Split(' ')
           }
-          cmake @configureArgs
-
-      - name: Build
-        shell: pwsh
-        run: |
-          cmake --build build --parallel
+          .\scripts\build_windows.ps1 `
+            -Preset "${{ matrix.preset }}" `
+            -Target "" `
+            -BuildTests "${{ matrix.build_tests }}" `
+            @extra
 
       - name: Test
         if: ${{ matrix.run_tests }}
         shell: pwsh
-        working-directory: build
         run: |
-          ctest --output-on-failure --timeout 600
+          ctest --test-dir "build/${{ matrix.preset }}" --output-on-failure --timeout 600
