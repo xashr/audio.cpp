@@ -1,0 +1,103 @@
+# CI (macos)
+#
+# Builds and tests the engine on macOS for each backend:
+#   - metal (arm64): macos-latest (Apple silicon), Metal ON (the Apple default)
+#   - cpu (x64):     macos-15-intel, Metal OFF
+#
+# Runner notes:
+#   - macos-15-intel is a hard pin: Apple ended Intel Mac support with macOS 15,
+#     so there is no newer x64 runner to move to (llama.cpp pins it too).
+#   - macos-latest is used (not pinned) so the arm64 job tracks the current
+#     Apple silicon runner.
+#
+# ctest runs on both jobs: no test requires a GPU/Metal device at runtime
+# (compile-time backend selection only applies to CUDA/Vulkan builds, which
+# this workflow does not enable).
+#
+# The old mac-build.yml is kept until this workflow is proven green.
+
+name: CI (macos)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - 'ci/**'
+    paths:
+      - '.github/workflows/ci-macos.yml'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.metal'
+      - 'model_specs/*.json'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/ci-macos.yml'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.metal'
+      - 'model_specs/*.json'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: metal (arm64)
+            runs_on: macos-latest
+            enable_metal: "ON"
+            ccache_key: macos-arm64-metal
+          - name: cpu (x64)
+            runs_on: macos-15-intel
+            enable_metal: "OFF"
+            ccache_key: macos-x64-cpu
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ matrix.ccache_key }}
+          evict-old-files: 1d
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENGINE_BUILD_TESTS=ON \
+            -DENGINE_ENABLE_METAL=${{ matrix.enable_metal }}
+
+      - name: Build
+        run: |
+          cmake --build build --parallel
+
+      - name: Test
+        run: |
+          cd build
+          ctest --output-on-failure --timeout 600

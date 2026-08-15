@@ -1,0 +1,104 @@
+# CI (nix)
+#
+# Builds every Nix flake package (full matrix):
+#   linux x64:  cpu, vulkan, python-scripts, cuda, rocm, rocm-gfx1151
+#   macos arm64: metal
+#
+# nixpkgs is pinned via the committed flake.lock, so builds are reproducible.
+# aarch64-linux cross-builds are not covered yet (future task FT-4).
+#
+# The old nix-build.yml is kept until this workflow is proven green.
+
+name: CI (nix)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - 'ci/**'
+    paths:
+      - '.github/workflows/ci-nix.yml'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.devops/nix/*'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.cu'
+      - '**/*.cuh'
+      - 'model_specs/*.json'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/ci-nix.yml'
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.devops/nix/*'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.cu'
+      - '**/*.cuh'
+      - 'model_specs/*.json'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cpu (linux x64)
+            package: cpu
+            runs_on: ubuntu-24.04
+          - name: vulkan (linux x64)
+            package: vulkan
+            runs_on: ubuntu-24.04
+          - name: python-scripts (linux x64)
+            package: python-scripts
+            runs_on: ubuntu-24.04
+          # cuda/rocm build toolkits from source via nixpkgs: give them a
+          # 16-core runner (free for public repos) or the 2-core default
+          # would blow the timeout.
+          - name: cuda (linux x64)
+            package: cuda
+            runs_on: ubuntu-latest-16-cores
+          - name: rocm (linux x64)
+            package: rocm
+            runs_on: ubuntu-latest-16-cores
+          - name: rocm-gfx1151 (linux x64)
+            package: rocm-gfx1151
+            runs_on: ubuntu-latest-16-cores
+          - name: metal (macos arm64)
+            package: metal
+            runs_on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+
+      - name: Build ${{ matrix.package }}
+        run: |
+          nix build ".#${{ matrix.package }}"
