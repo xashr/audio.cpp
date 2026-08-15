@@ -76,12 +76,12 @@ jobs:
             preset: windows-cpu-release
             build_tests: "ON"
             run_tests: true
-            extra_args: ""
+            cuda_arch: ""
           - name: vulkan (x64)
             preset: windows-vulkan-release
             build_tests: "OFF"
             run_tests: false
-            extra_args: ""
+            cuda_arch: ""
           - name: cuda (x64)
             preset: windows-cuda-release
             build_tests: "OFF"
@@ -89,7 +89,7 @@ jobs:
             # Explicit arch: the runner has no GPU, so 'auto' (nvidia-smi)
             # would find nothing and 'native' would fall back to sm_75
             # (see wip/ci-bugs-found.md #1).
-            extra_args: '-CudaArchitectures 89'
+            cuda_arch: "89"
 
     steps:
       - name: Checkout
@@ -111,9 +111,11 @@ jobs:
       - name: Build (all targets)
         shell: pwsh
         run: |
-          $extra = @()
-          if ("${{ matrix.extra_args }}" -ne "") {
-            $extra = "${{ matrix.extra_args }}".Split(' ')
+          # Hashtable splat for named-argument binding (an array splat would
+          # bind positionally and hit -Jobs).
+          $extra = @{}
+          if ("${{ matrix.cuda_arch }}" -ne "") {
+            $extra = @{ "-CudaArchitectures" = "${{ matrix.cuda_arch }}" }
           }
           .\scripts\build_windows.ps1 `
             -Preset "${{ matrix.preset }}" `

@@ -287,8 +287,20 @@ void test_loads_model_directory_through_family_spec() {
   (void)make_resources(root, current_config());
   auto assets = engine::models::fun_asr_nano::load_fun_asr_nano_assets(root);
   require_published_dimensions(assets->config);
-  engine::test::require_eq(assets->resources.model_root(), root,
-                           "Fun-ASR model root");
+  // Compare by identity, not string equality: on Windows the runner's %TEMP%
+  // uses the 8.3 short form (e.g. RUNNER~1) while resolved paths use the long
+  // form, so the same directory can appear in two different spellings.
+  bool same_root = false;
+  try {
+    same_root =
+        std::filesystem::equivalent(assets->resources.model_root(), root);
+  } catch (const std::filesystem::filesystem_error &) {
+    // A path that does not exist cannot be the model root.
+  }
+  engine::test::require(
+      same_root,
+      "Fun-ASR model root mismatch: expected=" + root.string() +
+          " actual=" + assets->resources.model_root().string());
   std::filesystem::remove_all(root);
 }
 
