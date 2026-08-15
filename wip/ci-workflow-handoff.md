@@ -25,15 +25,15 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 
 | Workflow | Contents | Status |
 |---|---|---|
-| `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only* ), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | **in final validation (see §4)** |
-| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF, per llama.cpp note about flaky runners), build+ctest, ccache | TODO (next) |
-| `ci-windows.yml` | windows-2025: cpu (build+ctest), vulkan (SDK install), cuda build-only via `build_windows.ps1` presets | TODO |
-| `ci-nix.yml` | full flake matrix: cpu, vulkan, cuda, rocm, metal (darwin runner), python-scripts | TODO |
+| `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only*), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | ✅ **green** (run 31910114679) |
+| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, ccache, **OpenMP OFF** (AppleClang, gotcha #5) | in flight (post-fix run) |
+| `ci-windows.yml` | windows-2025: cpu (build+ctest), vulkan (pinned LunarG SDK, build-only), cuda (build-only) — all via `scripts/build_windows.ps1` | in flight (post-fix run) |
+| `ci-nix.yml` | full flake matrix: cpu, vulkan, python-scripts, cuda, rocm, rocm-gfx1151, metal (macos-latest); cuda/rocm on 16-core runners; nixpkgs pinned via flake.lock | in flight (queued) |
 | `ci-checks.yml` | fast: loader/catalog sync (dedup from 4 old files), python lint (tools/*.py), actionlint + zizmor on workflow YAML | TODO (phase 2) |
 | `ci-webui.yml` | node 22: npm ci + svelte-check + vite build (`webui/native`, has `check` script) | TODO (phase 2) |
 | `ci-docker.yml` | PR-only buildx build (no push) to validate Dockerfiles | TODO (phase 2) |
 | `ci-sanitizers.yml` | ASan/TSan/UBSan matrix (PR-only) | TODO (phase 3, optional) |
-| old `linux-build.yml` etc. | delete each as its replacement proves green (linux-build.yml first) | TODO |
+| old `linux-build.yml` etc. | delete each as its replacement proves green | linux-build.yml **deleted**; mac/windows/nix pending |
 | `docker.yml` | keep as-is | — |
 
 **Shared conventions (already in ci-linux.yml, copy to the rest):**
@@ -119,6 +119,24 @@ output (they can see it in the UI).
    was reset+recommitted cleanly).
 4. Default branch of the fork is `release-0.1`; irrelevant to the upstream PR; user offered to
    change it but it turned out not to matter (gotcha #1 was the real issue).
+5. **New workflows must inherit the old workflows' toolchain workarounds** (bit us on the
+   first macos/windows push, commit `cc7d073` fixed it):
+   - macOS: AppleClang has **no OpenMP runtime** → `find_package(OpenMP REQUIRED)` fails.
+     Old `mac-build.yml` worked around it with `-DENGINE_ENABLE_OPENMP=OFF -DGGML_OPENMP=OFF`
+     → ci-macos.yml mirrors that.
+   - Windows: **`cl` is NOT on PATH** in the default shell, but **MinGW's `cc` IS** → bare
+     `cmake -G Ninja` auto-detects MinGW and MSVC-only flags (`/utf-8`) break it. The old
+     `windows-build.yml` never hit this because it uses `scripts/build_windows.ps1`, which
+     locates MSVC via vswhere and passes explicit compiler paths → ci-windows.yml uses the
+     script too. Added a `-BuildTests` override param to the script for the ctest job.
+   - Windows vulkan SDK: no choco package named `vulkansdk` exists. Install the pinned
+     official LunarG installer (llama.cpp's approach); it lands in `C:\VulkanSDK\<ver>`
+     which `build_windows.ps1`'s Find-VulkanRoot reads via VULKAN_SDK.
+   - General lesson: when replacing an old workflow, diff its configure flags against the
+     project's build scripts first — they encode hard-won toolchain workarounds.
+6. **Log access**: unauthenticated API gives run/job/step status only; job logs need a
+   token (403). Ask the user to paste the tail of failed steps (they can see the UI).
+   Step-level `conclusion` already localizes failures well.
 
 ## 6. DEFERRED (FT-1): arm64 test failures — future task, no deep dive for now
 
@@ -173,19 +191,37 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 - **FT-3: sm_75 Docker images** (bugs doc #1) — product issue, file upstream, out of scope
   for the CI refactor (CI itself uses an explicit arch).
 
-## 8. Immediate next steps
+## 8. Immediate next steps (state as of 2026-08-15 ~22:30 UTC)
 
-1. Confirm the adjusted `ci-linux.yml` run is fully green (watch the run triggered by the
-   adjustment push on `ci/linux-workflow`).
-2. When green: delete `linux-build.yml`, push, verify (the old mac/windows/nix workflows
-   still run on `ci/**` without path filters — harmless noise until they're removed too).
-3. Continue per-domain: `ci-macos.yml` next (design in §2; same loop: write → actionlint →
-   push to `ci/**` → watch; if mac ctest has new never-covered failures, apply the same
-   defer-and-log policy as FT-1/FT-2), then `ci-windows.yml`, then `ci-nix.yml` (full flake
-   matrix; rocm/metal nix packages were never built in CI → same policy if they fail).
-4. Remember: before the upstream PR — drop `wip/`, decide on branch protection/required
-   checks with upstream maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs
-   non-required).
+Done since last update:
+- Adjusted `ci-linux.yml` (arm64 build-only, HIP removed) → **run 31910114679 FULLY GREEN**.
+- `linux-build.yml` **deleted**; `ci-macos.yml`, `ci-windows.yml`, `ci-nix.yml` added
+  (commit `cfc73d7`).
+- First macos/windows runs failed (toolchain workarounds, gotcha #5) → fixed in `cc7d073`
+  (mac: OpenMP OFF; windows: via build_windows.ps1 + pinned LunarG SDK install).
+
+In flight (branch `ci/linux-workflow`):
+- CI (macos) run 31911868719 (post-fix), CI (windows) run 31911868644 (post-fix)
+- CI (nix) run 31911392633 (queued on a 16-core runner; 7 jobs incl. rocm/cuda/metal —
+  all never-covered nix packages; same defer-and-log policy applies if any fail)
+- The 3 old workflows (mac-build/windows-build/nix-build) still run on every `ci/**` push
+  (no path filters) — noise; delete each as its replacement proves green (linux done).
+
+Next:
+1. Watch the 3 runs above. On green: delete the matching old workflow (one commit each),
+   push, verify.
+   - ci-macos green → delete `mac-build.yml` (then the old macOS noise stops)
+   - ci-windows green → delete `windows-build.yml`
+   - ci-nix green → delete `nix-build.yml`
+   - If any job fails on never-covered ground → apply the user policy: defer that job
+     (build-only or remove), add an FT-x entry here + wip/ci-bugs-found.md, re-push just
+     that workflow file (path filters make re-runs surgical).
+   - If mac/windows **ctest** fails (new coverage, never ran before): same policy.
+2. Then phase 2: ci-checks.yml (loader/spec sync dedup — NOTE: it's the ONLY copy of that
+   check once all old workflows are deleted, so land it before the last deletion),
+   ci-webui.yml, ci-docker.yml (PR-only buildx).
+3. Before the upstream PR — drop `wip/`, decide branch protection/required checks with
+   maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs non-required).
 
 ## 9. Environment facts (dev machine)
 
