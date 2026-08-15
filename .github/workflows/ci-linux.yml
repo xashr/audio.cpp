@@ -1,0 +1,202 @@
+# CI (linux)
+#
+# Builds and tests the engine on Linux for each backend:
+#   - cpu:    x64 + arm64, full build + ctest
+#   - vulkan: x64 + arm64, build only (no GPU on runners)
+#   - cuda:   x64 in an nvidia/cuda container (no GPU), build only
+#   - hip:    x64 in a rocm/dev container (no GPU), build only
+#
+# The GPU container jobs compile-verify the CUDA/HIP code paths (including
+# the test sources). ctest only runs on the CPU jobs because several tests
+# select their backend at compile time (GGML_USE_CUDA / GGML_USE_VULKAN)
+# and require a real device, which GitHub runners do not have.
+
+name: CI (linux)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - 'ci/**'
+    paths:
+      - '.github/workflows/ci-linux.yml'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.cu'
+      - '**/*.cuh'
+      - 'model_specs/*.json'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/ci-linux.yml'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+      - '**/*.h'
+      - '**/*.hpp'
+      - '**/*.c'
+      - '**/*.cpp'
+      - '**/*.cu'
+      - '**/*.cuh'
+      - 'model_specs/*.json'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.runs_on }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cpu (x64)
+            runs_on: ubuntu-24.04
+            enable_vulkan: "OFF"
+            run_tests: true
+            ccache_key: linux-x64-cpu
+          - name: cpu (arm64)
+            runs_on: ubuntu-24.04-arm
+            enable_vulkan: "OFF"
+            run_tests: true
+            ccache_key: linux-arm64-cpu
+          - name: vulkan (x64)
+            runs_on: ubuntu-24.04
+            enable_vulkan: "ON"
+            run_tests: false
+            ccache_key: linux-x64-vulkan
+          - name: vulkan (arm64)
+            runs_on: ubuntu-24.04-arm
+            enable_vulkan: "ON"
+            run_tests: false
+            ccache_key: linux-arm64-vulkan
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: ${{ matrix.ccache_key }}
+          evict-old-files: 1d
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      - name: Install dependencies (vulkan)
+        if: ${{ matrix.enable_vulkan == 'ON' }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            glslc libvulkan-dev spirv-headers
+
+      - name: Configure
+        run: |
+          cmake -S . -B build \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DENGINE_BUILD_TESTS=ON \
+            -DENGINE_ENABLE_VULKAN=${{ matrix.enable_vulkan }}
+
+      - name: Build
+        run: |
+          cmake --build build --parallel "$(nproc)"
+
+      - name: Test
+        if: ${{ matrix.run_tests }}
+        run: |
+          cd build
+          ctest --output-on-failure --timeout 600
+
+  cuda:
+    name: CUDA (x64)
+    runs-on: ubuntu-24.04
+    container: nvidia/cuda:12.6.2-devel-ubuntu24.04
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt update
+          apt install -y --no-install-recommends \
+            build-essential cmake ninja-build git libgomp1
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: linux-x64-cuda
+          evict-old-files: 1d
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # Single explicit architecture: keeps the job fast and deterministic
+      # (CMAKE_CUDA_ARCHITECTURES=native would fall back to sm_75 on a
+      # GPU-less runner). The published multi-arch images come from the
+      # Docker workflow instead.
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CUDA_ARCHITECTURES=89 \
+            -DENGINE_ENABLE_CUDA=ON \
+            -DENGINE_BUILD_TESTS=ON
+
+      - name: Build
+        run: |
+          cmake --build build --parallel "$(nproc)"
+
+  hip:
+    name: HIP/ROCm (x64)
+    runs-on: ubuntu-24.04
+    container: rocm/dev-ubuntu-24.04:6.4.4
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install dependencies
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          apt update
+          apt install -y --no-install-recommends \
+            build-essential cmake ninja-build git \
+            rocblas-dev hipblas-dev rocwmma-dev
+
+      - name: ccache
+        uses: ggml-org/ccache-action@v1.2.21
+        with:
+          key: linux-x64-hip
+          evict-old-files: 1d
+          save: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+
+      # Single explicit GPU target: keeps the job fast (gfx1030 compiles
+      # quickly); real devices are covered by the Nix/rocm packages.
+      - name: Configure
+        run: |
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_HIP_COMPILER="$(hipconfig -l)/clang" \
+            -DGPU_TARGETS="gfx1030" \
+            -DENGINE_ENABLE_HIP=ON \
+            -DENGINE_BUILD_TESTS=ON
+
+      - name: Build
+        run: |
+          cmake --build build --parallel "$(nproc)"
