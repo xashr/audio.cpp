@@ -3,6 +3,7 @@
 // prints per-channel statistics + writes a WAV, so the output can be diffed
 // against the Python reference (model.decode with fp32 / autocast disabled).
 
+#include "engine/framework/assets/tensor_source.h"
 #include "engine/framework/core/backend.h"
 #include "engine/framework/core/execution_context.h"
 #include "engine/models/moss/shared/audio_tokenizer_decoder.h"
@@ -101,8 +102,11 @@ int main(int argc, char ** argv) {
 
         std::cout << "codec=" << codec_dir.string() << "\n";
         std::cout << "loading decoder weights...\n" << std::flush;
+        auto codec_source = codec_dir.extension() == ".gguf"
+            ? engine::assets::open_tensor_source(codec_dir, "audio_tokenizer_weights")
+            : engine::assets::open_tensor_source(codec_dir);
         engine::models::moss::MossAudioTokenizerDecoder decoder(
-            codec_dir, execution_context, num_quantizers, kWeightContextBytes, kGraphArenaBytes);
+            *codec_source, execution_context, num_quantizers, kWeightContextBytes, kGraphArenaBytes);
 
         std::cout << "decoding " << frames << " frames...\n" << std::flush;
         const auto stereo = decoder.decode(codes);

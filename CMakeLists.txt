@@ -2472,6 +2472,12 @@ if (ENGINE_BUILD_TESTS)
         NAME scaled_dot_product_attention_test
         COMMAND scaled_dot_product_attention_test
     )
+    # Requires a CUDA backend and a GPU; the test detects this and exits with
+    # kExitSkip (125) rather than failing on non-CUDA builds or GPU-less machines.
+    set_tests_properties(scaled_dot_product_attention_test PROPERTIES
+        SKIP_RETURN_CODE 125
+        TIMEOUT 300
+    )
 
     add_engine_unittest(asr_standalone_gguf_test tests/unittests/test_asr_standalone_gguf.cpp)
     target_include_directories(asr_standalone_gguf_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests/unittests)

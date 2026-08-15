@@ -6,12 +6,14 @@
 // gate: the RLFQ quantizer is robust to small latent differences, so matching
 // codes confirms both the encoder stack and the quantize path.
 
+#include "engine/framework/assets/tensor_source.h"
 #include "engine/framework/core/backend.h"
 #include "engine/framework/core/execution_context.h"
 #include "engine/models/moss/shared/audio_tokenizer_encoder.h"
 
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
@@ -115,8 +117,12 @@ int main(int argc, char ** argv) {
         engine::core::ExecutionContext execution_context(backend_config);
 
         std::cout << "loading codec encoder weights...\n" << std::flush;
+        const std::filesystem::path codec_path(codec_dir);
+        auto codec_source = codec_path.extension() == ".gguf"
+            ? engine::assets::open_tensor_source(codec_path, "audio_tokenizer_weights")
+            : engine::assets::open_tensor_source(codec_path);
         engine::models::moss::MossAudioTokenizerEncoder encoder(
-            codec_dir, execution_context, num_quantizers, kWeightContextBytes, kGraphArenaBytes);
+            *codec_source, execution_context, num_quantizers, kWeightContextBytes, kGraphArenaBytes);
 
         std::cout << "encoding...\n" << std::flush;
         const auto codes = encoder.encode(stereo);
