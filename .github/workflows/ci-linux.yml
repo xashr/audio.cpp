@@ -10,6 +10,8 @@
 # the test sources). ctest only runs on the CPU jobs because several tests
 # select their backend at compile time (GGML_USE_CUDA / GGML_USE_VULKAN)
 # and require a real device, which GitHub runners do not have.
+#
+# The old linux-build.yml is kept until this workflow is proven green.
 
 name: CI (linux)
 
