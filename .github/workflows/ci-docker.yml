@@ -1,0 +1,103 @@
+# CI (docker)
+#
+# Validates that the published Dockerfiles build — and the resulting image
+# runs — on every PR (and push) that could break them. Validation only:
+# local buildx build, no login, no push, no ghcr cache writes. The daily
+# docker.yml remains the sole publisher.
+#
+# Scope:
+#   - native amd64 only (no qemu cross-builds; multi-arch is docker.yml's job)
+#   - the `full` target of each published image (cpu / cuda12 / cuda13),
+#     with the same build args as docker.yml
+#   - a runtime smoke test after the build (catches broken runtime deps,
+#     missing libs, bad COPYs — things the build stage cannot see)
+#
+# Note: the CUDA image compiles for sm_75 here (nvcc -arch=native on a
+# GPU-less runner) — that is exactly what the published image does today
+# (see wip/ci-bugs-found.md #1); an explicit-arch fix will validate here.
+
+name: CI (docker)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - 'ci/**'
+    paths:
+      - '.github/workflows/ci-docker.yml'
+      - '.devops/**'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+  pull_request:
+    branches:
+      - main
+      - dev
+    paths:
+      - '.github/workflows/ci-docker.yml'
+      - '.devops/**'
+      - '**/CMakeLists.txt'
+      - '**/.cmake'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: validate (${{ matrix.name }}, amd64)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: cpu
+            dockerfile: .devops/cpu.Dockerfile
+            extra_args: ""
+          - name: cuda12
+            dockerfile: .devops/cuda.Dockerfile
+            extra_args: "CUDA_VERSION=12.9.2"
+          - name: cuda13
+            dockerfile: .devops/cuda.Dockerfile
+            extra_args: "CUDA_VERSION=13.3.0"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          target: full
+          platforms: linux/amd64
+          # Single platform → load into the local daemon for the smoke test.
+          load: true
+          tags: local/audiocpp-validate-${{ matrix.name }}:ci
+          # Only the args that affect build content; label args keep the
+          # Dockerfile defaults (this is a validation build).
+          build-args: |
+            APP_VERSION=${{ github.sha }}
+            APP_REVISION=${{ github.sha }}
+            ${{ matrix.extra_args }}
+          # GHA cache: read-only for fork PRs (no cache poisoning).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test (runtime image)
+        run: |
+          # Bypasses the entrypoint multiplexer and checks the runtime stage
+          # directly: binary present, shared libraries resolvable, no missing
+          # runtime deps.
+          docker run --rm \
+            --entrypoint /app/audiocpp_cli \
+            local/audiocpp-validate-${{ matrix.name }}:ci --help
