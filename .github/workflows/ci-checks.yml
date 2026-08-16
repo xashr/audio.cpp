@@ -44,8 +44,16 @@ jobs:
 
       - name: actionlint
         run: |
-          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
-            | tar xz actionlint
+          # Download to a file with retries, then verify it is a complete, sane
+          # gzip before extracting (a truncated stream made `curl | tar` fail
+          # with "gzip: unexpected end of file" on 2026-08-16).
+          curl -sL --retry 5 --retry-delay 2 \
+            -o /tmp/actionlint.tar.gz \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz
+          test -s /tmp/actionlint.tar.gz
+          gzip -t /tmp/actionlint.tar.gz
+          tar xzf /tmp/actionlint.tar.gz -C /tmp
+          mv /tmp/actionlint ./actionlint
           # macos-15-intel is a real label (Apple's last Intel Mac runner);
           # actionlint's built-in label list predates it.
           ./actionlint -ignore 'label "macos-15-intel" is unknown' .github/workflows/*.yml
