@@ -48,4 +48,4 @@ jobs:
             | tar xz actionlint
           # macos-15-intel is a real label (Apple's last Intel Mac runner);
           # actionlint's built-in label list predates it.
-          ./actionlint -ignore 'label "macos-15-intel" is unknown' .github/workflows/
+          ./actionlint -ignore 'label "macos-15-intel" is unknown' .github/workflows/*.yml
