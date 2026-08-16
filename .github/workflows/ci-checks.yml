@@ -1,0 +1,51 @@
+# CI (checks)
+#
+# Fast, dependency-free checks that run on every push/PR (no path filter;
+# the whole job takes well under a minute):
+#   - loader/catalog sync: the check all four old build workflows ran,
+#     deduplicated into one place (they are being retired)
+#   - actionlint: static analysis of the workflow files
+
+name: CI (checks)
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - dev
+      - 'ci/**'
+  pull_request:
+    branches:
+      - main
+      - dev
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    name: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Loader/catalog sync
+        run: |
+          python3 tools/check_loader_catalog_sync.py --self-test
+          python3 tools/check_loader_catalog_sync.py
+
+      - name: actionlint
+        run: |
+          curl -sL https://github.com/rhysd/actionlint/releases/download/v1.7.7/actionlint_1.7.7_linux_amd64.tar.gz \
+            | tar xz actionlint
+          # macos-15-intel is a real label (Apple's last Intel Mac runner);
+          # actionlint's built-in label list predates it.
+          ./actionlint -ignore 'label "macos-15-intel" is unknown' .github/workflows/
