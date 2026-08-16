@@ -138,7 +138,26 @@ generator.
 
 ---
 
-## 9. CI never covered GPU backends → silent bit-rot  [process note]
+## 9. CI (macos) build hangs on GitHub macOS runners  [OPEN — CI/infra]
+
+Run 31940963758 (2026-08-16): both jobs (metal arm64 on macos-latest, cpu x64 on
+macos-15-intel) passed Configure, then sat in **Build** with no log output for 38+ min;
+the metal job's log showed "cancelled" (120-min job timeout). The previous day's metal
+run built fine (~40 min to the Test step) — not deterministic.
+
+Complicating factor: **macOS job log blobs are lost** (BlobNotFound on both macos runs,
+windows logs fine) → the user's Actions UI is the only way to see live logs.
+
+Hypotheses: (1) `macos-latest` label flipped to a new macOS/Xcode (new clang/xcrun-metal
+hang); (2) ccache hang on macOS; (3) runner infra stall. Counter-evidence for (1) on the
+arm64 job: the nix `metal` package built fine on macos-latest the same day (different
+build path: nix stdenv + no ccache). Planned: pin `macos-15`, add env-diagnostics step
+(sw_vers/xcodebuild/clang/ccache versions), one run without ccache to test (2).
+State: see handoff §8 (top open item).
+
+---
+
+## 10. CI never covered GPU backends → silent bit-rot  [process note]
 
 Pre-refactor CI built cpu/vulkan only. CUDA/HIP/Metal/Windows-GPU code paths had zero build
 verification (they only compiled when Docker builds happened to pass). The new

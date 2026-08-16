@@ -26,14 +26,15 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 | Workflow | Contents | Status |
 |---|---|---|
 | `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only*), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | ✅ **green** (run 31910114679) |
-| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, ccache, **OpenMP OFF** (AppleClang, gotcha #5) | in flight (post-fix run) |
-| `ci-windows.yml` | windows-2025: cpu (build+ctest) ✅, vulkan (pinned LunarG SDK, build-only) ✅, cuda (manual dispatch only: choco toolkit + build, llama.cpp precedent) — all via `scripts/build_windows.ps1` | cpu+vulkan green; cuda unverified (FT-6) |
-| `ci-nix.yml` | cpu, vulkan, python-scripts (linux x64) + metal (macos-latest); nixpkgs pinned via flake.lock; cuda/rocm/rocm-gfx1151 deferred (FT-5) | in flight (rescoped) |
+| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, ccache, **OpenMP OFF** (AppleClang, gotcha #5) | ⏳ **build hangs on runner** (see §8) |
+| `ci-windows.yml` | windows-2025: cpu (build+ctest) ✅, vulkan (pinned LunarG SDK, build-only) ✅, cuda (manual dispatch only: choco toolkit + build, llama.cpp precedent) — all via `scripts/build_windows.ps1` | ✅ green (cuda unverified, FT-6) |
+| `ci-nix.yml` | cpu, vulkan, python-scripts (linux x64) + metal (macos-latest); nixpkgs pinned via flake.lock; cuda/rocm/rocm-gfx1151 deferred (FT-5) | ✅ **green** (all 4 jobs) |
+| `ci-checks.yml` | loader/catalog sync (deduped from the 4 old files) + actionlint on workflow YAML; ~30s, no path filter | one-line glob fix pushed (84796b1), re-run pending |
 | `ci-checks.yml` | fast: loader/catalog sync (dedup from 4 old files), python lint (tools/*.py), actionlint + zizmor on workflow YAML | TODO (phase 2) |
 | `ci-webui.yml` | node 22: npm ci + svelte-check + vite build (`webui/native`, has `check` script) | TODO (phase 2) |
 | `ci-docker.yml` | PR-only buildx build (no push) to validate Dockerfiles | TODO (phase 2) |
 | `ci-sanitizers.yml` | ASan/TSan/UBSan matrix (PR-only) | TODO (phase 3, optional) |
-| old `linux-build.yml` etc. | delete each as its replacement proves green | linux-build.yml **deleted**; mac/windows/nix pending |
+| old `linux-build.yml` etc. | delete as replacements prove green | **ALL DELETED** (linux with its green run; mac/windows/nix on 2026-08-16 once cpu+vulkan/nix replacements were proven — user asked to stop them stealing runners) |
 | `docker.yml` | keep as-is | — |
 
 **Shared conventions (already in ci-linux.yml, copy to the rest):**
@@ -134,9 +135,22 @@ output (they can see it in the UI).
      which `build_windows.ps1`'s Find-VulkanRoot reads via VULKAN_SDK.
    - General lesson: when replacing an old workflow, diff its configure flags against the
      project's build scripts first — they encode hard-won toolchain workarounds.
-6. **Log access**: unauthenticated API gives run/job/step status only; job logs need a
-   token (403). Ask the user to paste the tail of failed steps (they can see the UI).
-   Step-level `conclusion` already localizes failures well.
+6. **Log access**: `gh` IS authenticated now (account xashr, GH_TOKEN in env).
+   - `gh run list/view --repo xashr/audio.cpp` works; `gh run view <id> --log` only for
+     COMPLETED runs (in-progress: "logs will be available when it is complete").
+   - Raw: `curl -H "Authorization: Bearer $(gh auth token)" \
+     https://api.github.com/repos/xashr/audio.cpp/actions/jobs/<jobid>/logs`
+   - **macOS job log blobs are systematically lost** (BlobNotFound on the jobs of BOTH
+     macos runs so far, even after completion; windows logs work fine). For macOS jobs the
+     user's Actions UI is the only live window — ask them for the last ~20 log lines.
+   - Step-level `conclusion` via API always works and localizes failures well.
+7. **`gh workflow run` (dispatch) 422s**: dispatch resolves the workflow from the DEFAULT
+   branch (`release-0.1`), where the new workflows don't exist (and `main` doesn't have
+   them either). User offered to change the default branch; deferred — re-triggering by
+   pushing a change to the workflow file works and doubles as a path-filter test.
+8. **`macos-latest` can flip OS versions** (GitHub re-points the label; hypothesis for the
+   current build hang, see §8). For a small project, pinning `macos-15` is the
+   reproducible choice (llama.cpp uses macos-latest and accepts that churn).
 
 ## 6. DEFERRED (FT-1): arm64 test failures — future task, no deep dive for now
 
@@ -203,50 +217,98 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
   Actions UI (or API dispatch once the workflow is on a default branch) and confirm
   the build; fallback install = llama.cpp's NVIDIA redist-zip action pattern.
 
-## 8. Immediate next steps (state as of 2026-08-15 ~22:30 UTC)
+## 8. State + immediate next steps (updated 2026-08-16 ~11:00 UTC)
 
-Done since last update:
-- Adjusted `ci-linux.yml` (arm64 build-only, HIP removed) → **run 31910114679 FULLY GREEN**.
-- `linux-build.yml` **deleted**; `ci-macos.yml`, `ci-windows.yml`, `ci-nix.yml` added
-  (commit `cfc73d7`).
-- First macos/windows runs failed (toolchain workarounds, gotcha #5) → fixed in `cc7d073`
-  (mac: OpenMP OFF; windows: via build_windows.ps1 + pinned LunarG SDK install).
+### Status board (branch `ci/linux-workflow`, tip 84796b1)
 
-Run results on 653ee10 (2026-08-16 morning):
-- CI (linux) ✅ green (re-confirmed after the assets-test fix)
-- CI (windows): cpu ✅ (8.3-path test fix works), vulkan ✅ (LunarG SDK install works),
-  cuda ❌ → **root cause: windows-2025 image has NO CUDA toolkit** (assumption was
-  wrong). Fixed in 25b1d26: cuda job split out, gated to workflow_dispatch
-  (llama.cpp precedent, see their build-cuda-windows.yml header), installs
-  `choco cuda --version=12.9.0.576` (Dockerfile pin) before building. FT-6 = verify.
-- CI (macos): metal (arm64) ❌ — **log blobs lost (BlobNotFound), cause unknown**;
-  cpu (x64) job cancelled after ~2h on the macos-15-intel queue (runner scarcity,
-  noted in the workflow header). Fresh run triggered by the nix-rescope push
-  (comment bump in ci-macos.yml re-triggers via path filter) — get its metal log.
-- CI (nix): sat queued 12h+ (16-core pool); rescoped in this commit: only
-  cpu/vulkan/python-scripts (linux) + metal (macos) for now; cuda/rocm/rocm-gfx1151
-  → FT-5 (never covered, heavy).
+| Workflow | State |
+|---|---|
+| CI (linux) | ✅ green (run 31910114679, re-confirmed on 653ee10) |
+| CI (windows) | ✅ green (run 31940775162 on 25b1d26: cpu+ctest, vulkan; cuda job correctly skipped on push) |
+| CI (nix) | ✅ **green** (run 31940963702 on 406deb4: cpu, vulkan, python-scripts, metal) |
+| CI (checks) | 🔧 glob bug fixed in 84796b1 (pushed); re-run pending — ~30s job, check first |
+| CI (macos) | ⏳ **HUNG — see below** |
 
-Next:
-1. Watch the fresh CI (macos) + CI (nix) runs (this push). If metal fails again:
-   read the log (gh works now: `gh auth token` → curl the job logs API, or the UI),
-   diagnose; if it's never-covered ground → defer+log per policy.
-   If nix metal/python-scripts fail → same policy.
-2. On green: delete the matching old workflow (one commit each): ci-macos →
-   `mac-build.yml`, ci-windows → `windows-build.yml`, ci-nix → `nix-build.yml`.
-   NOTE: loader/spec sync check lives ONLY in the old workflows — land
-   ci-checks.yml (phase 2) before the LAST deletion so coverage isn't lost.
-3. Manual: run the windows cuda dispatch job once (FT-6).
-4. Then phase 2: ci-checks.yml, ci-webui.yml, ci-docker.yml (PR-only buildx).
-5. Before the upstream PR — drop `wip/`, decide branch protection/required checks
-   with maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs
-   non-required).
+### OPEN TOP ITEM: CI (macos) build hangs on the runners
 
-Log access (now working): `gh` is authenticated (account xashr, GH_TOKEN).
-Job logs: `curl -H "Authorization: Bearer $(gh auth token)" \
-  https://api.github.com/repos/xashr/audio.cpp/actions/jobs/<id>/logs`
-(or `gh run view <run> --log-failed`). Note: log blobs can vanish (BlobNotFound
-seen on the first macos run) — pull logs while the run is fresh.
+Run **31940963758** (406deb4, started 10:10Z): both jobs passed Checkout/ccache/
+Configure and sat in **Build** 38+ min with **no further log output** (user checked the
+live UI: no running process; the metal job's log even showed "cancelled" — likely the
+120-min job timeout cancelling it while the other kept hanging).
+
+Key facts:
+- The PREVIOUS metal run (653ee10, yesterday) built fine (~40 min to the Test step,
+  then failed in a test — that failure log is also lost, BlobNotFound). So the build is
+  not deterministically broken; something changed in the runner environment.
+- Old `mac-build` was macos-14 (**arm64**), Metal OFF, Debug, 3 targets, no tests →
+  ~10-15 min. New: Metal ON + Release + all targets + 50 test binaries + cold ccache
+  (caches only save on main), and the x64 job runs on Intel (slower; the old build never
+  used Intel).
+- macOS job logs are unusable from our side (BlobNotFound, gotcha #6) — the user's UI is
+  the only live window.
+
+Hypotheses (ranked):
+1. **`macos-latest` label flipped** to a newer macOS/Xcode between yesterday and today
+   (gotcha #8) — new clang/xcrun-metal could hang. The x64 job (macos-15-intel, pinned)
+   hangs too, which argues against a pure arm64/Xcode-26 issue unless the flip affects
+   both pools… or it's hypothesis 2/3.
+2. **ccache hang on macOS** (ccache-action + AppleClang; works in llama.cpp but their
+   image/version mix may differ).
+3. GitHub macOS runner infra stall (both jobs on different pools hanging simultaneously
+   is suspicious; could also be a repo-level Actions hiccup).
+
+Next steps (in order):
+1. Check the final state of run 31940963758 (both jobs should end "cancelled" at the
+   120-min timeout) and the CI (checks) re-run (84796b1) — expect green.
+2. **Ask the user for the last ~20 lines of each job's log from the UI** — the last line
+   localizes the hang: stuck mid-`.metal` shader compile → Xcode/xcrun (hypothesis 1);
+   stuck before any compile line (cmake/ninja banner only) → cmake level; stuck at the
+   first object file → ccache (hypothesis 2).
+3. Apply the fix + diagnostics in ONE push to ci-macos.yml (re-triggers via path filter):
+   - pin `macos-15` instead of `macos-latest` for the arm64 job (reproducible; kills
+     hypothesis 1; macos-15 is still a supported pool — llama.cpp-style macos-latest
+     only if the team wants to track newest)
+   - add a diagnostic step right after Checkout: `sw_vers; xcodebuild -version; clang
+     --version; ccache --version; uname -m; sysctl -n hw.ncpu` → the next run's log
+     self-documents the environment
+   - optionally ONE diagnostic run with the ccache step removed (test hypothesis 2);
+     re-add after.
+4. If the metal job finally completes and ctest FAILS with a never-covered test issue →
+   user policy: defer that test/job, FT entry, keep going.
+5. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
+   12.9.0.576 install unverified).
+
+### Done since the 22:30 note (2026-08-16)
+- 653ee10 results: linux ✅; windows cpu ✅ (the 8.3-path test fix works) + vulkan ✅
+  (LunarG SDK install works) + cuda ❌ → **windows-2025 image has NO CUDA toolkit**
+  (bugs doc #8); 25b1d26: cuda job split out + workflow_dispatch-gated + choco install
+  (llama.cpp's build-cuda-windows.yml is the precedent: manual-only, "very heavy on the
+  CI").
+- 406deb4: ci-nix rescoped (dropped cuda/rocm/rocm-gfx1151 → FT-5; 16-core runners sat
+  queued 12h+ — public-repo larger-runner pool is flaky) → **CI (nix) fully green
+  including nix metal on macos-latest** (note: the nix metal job built fine on
+  macos-latest TODAY while ci-macos hangs — more evidence the hang is ci-macos-specific,
+  e.g. ccache or the plain-cmake build path, not the OS image).
+- d5640cf: **deleted all old build workflows** (mac-build, windows-build, nix-build;
+  linux-build already gone) per user request (they stole runners on every ci/** push);
+  their unique coverage — the loader/catalog sync check — moved into new
+  **ci-checks.yml** (sync check + actionlint, ~30s, no path filter).
+- CI (checks) 31941161265 ❌: `actionlint .github/workflows/` → "is a directory" (needs
+  a file glob; the sync check itself PASSED). Fixed in 84796b1 (`*.yml`).
+- Environment: workspace moved (repo now back at /workspace/audio.cpp-fork,
+  llama.cpp at /workspace/llama.cpp); /tmp was wiped (actionlint re-downloaded to
+  /tmp/lint/actionlint — curl the v1.7.7 release tarball if gone again);
+  **gh is authenticated** (gotcha #6).
+
+### Then
+- Phase 2: ci-webui.yml (SvelteKit: npm ci + svelte-check + vite build in webui/native),
+  ci-docker.yml (PR-only buildx build to validate Dockerfiles).
+- Phase 3 (optional): ci-sanitizers (ASan/TSan/UBSan, PR-only), code-style/clang-format,
+  SHA-pin actions, tag-triggered release.yml.
+- Before the upstream PR: drop `wip/`; decide required checks with maintainers
+  (suggest: CI (linux) cpu + CI (checks) required; GPU jobs non-required); mention in
+  the PR: new test coverage surfaced real bugs (wip/ci-bugs-found.md #1 sm_75 docker,
+  #5 arm64 audio math) — the FT list is the follow-up plan.
 
 ## 9. Environment facts (dev machine)
 
