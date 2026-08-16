@@ -121,7 +121,24 @@ path-filtered workflow.
 
 ---
 
-## 8. CI never covered GPU backends → silent bit-rot  [process note]
+## 8. windows-2025 runner image ships NO CUDA toolkit  [environment fact]
+
+The CI (windows) cuda job failed with `build_windows.ps1`'s own clear error:
+"Official CUDA Toolkit was not found. Install it so nvcc exists under
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v*\bin." — the assumption
+that the runner image preinstalls the CUDA toolkit was wrong. Fix: install it
+in the job (`choco cuda --version=12.9.0.576`, Dockerfile pin) and gate the job
+to manual dispatch (llama.cpp's build-cuda-windows.yml does the same thing
+with NVIDIA redist zips and is also dispatch-only, "very heavy on the CI").
+
+Also relevant: the image's default shell has **MinGW cc on PATH but not MSVC
+cl** — bare `cmake -G Ninja` auto-detects MinGW and MSVC-only flags break it.
+Use the project's build script (explicit vswhere-based MSVC setup) or the VS
+generator.
+
+---
+
+## 9. CI never covered GPU backends → silent bit-rot  [process note]
 
 Pre-refactor CI built cpu/vulkan only. CUDA/HIP/Metal/Windows-GPU code paths had zero build
 verification (they only compiled when Docker builds happened to pass). The new

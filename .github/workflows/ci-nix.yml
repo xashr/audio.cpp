@@ -1,11 +1,16 @@
 # CI (nix)
 #
-# Builds every Nix flake package (full matrix):
-#   linux x64:  cpu, vulkan, python-scripts, cuda, rocm, rocm-gfx1151
+# Builds the Nix flake packages:
+#   linux x64:  cpu, vulkan, python-scripts
 #   macos arm64: metal
 #
 # nixpkgs is pinned via the committed flake.lock, so builds are reproducible.
-# aarch64-linux cross-builds are not covered yet (future task FT-4).
+#
+# Deferred (future tasks): cuda/rocm/rocm-gfx1151 packages were never built
+# in CI before (the old nix-build.yml only covered cpu+vulkan), and the
+# toolkit stacks they build from nixpkgs are very heavy; aarch64-linux
+# cross-builds are not covered yet either. See wip/ci-bugs-found.md / the
+# handoff FT list (FT-4, FT-5).
 #
 # The old nix-build.yml is kept until this workflow is proven green.
 
@@ -76,18 +81,8 @@ jobs:
           - name: python-scripts (linux x64)
             package: python-scripts
             runs_on: ubuntu-24.04
-          # cuda/rocm build toolkits from source via nixpkgs: give them a
-          # 16-core runner (free for public repos) or the 2-core default
-          # would blow the timeout.
-          - name: cuda (linux x64)
-            package: cuda
-            runs_on: ubuntu-latest-16-cores
-          - name: rocm (linux x64)
-            package: rocm
-            runs_on: ubuntu-latest-16-cores
-          - name: rocm-gfx1151 (linux x64)
-            package: rocm-gfx1151
-            runs_on: ubuntu-latest-16-cores
+          # TODO (FT-5): re-add cuda / rocm / rocm-gfx1151 once their
+          # nixpkgs toolkit builds are proven (heavy; never in CI before).
           - name: metal (macos arm64)
             package: metal
             runs_on: macos-latest

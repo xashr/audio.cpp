@@ -27,8 +27,8 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 |---|---|---|
 | `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only*), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | ✅ **green** (run 31910114679) |
 | `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, ccache, **OpenMP OFF** (AppleClang, gotcha #5) | in flight (post-fix run) |
-| `ci-windows.yml` | windows-2025: cpu (build+ctest), vulkan (pinned LunarG SDK, build-only), cuda (build-only) — all via `scripts/build_windows.ps1` | in flight (post-fix run) |
-| `ci-nix.yml` | full flake matrix: cpu, vulkan, python-scripts, cuda, rocm, rocm-gfx1151, metal (macos-latest); cuda/rocm on 16-core runners; nixpkgs pinned via flake.lock | in flight (queued) |
+| `ci-windows.yml` | windows-2025: cpu (build+ctest) ✅, vulkan (pinned LunarG SDK, build-only) ✅, cuda (manual dispatch only: choco toolkit + build, llama.cpp precedent) — all via `scripts/build_windows.ps1` | cpu+vulkan green; cuda unverified (FT-6) |
+| `ci-nix.yml` | cpu, vulkan, python-scripts (linux x64) + metal (macos-latest); nixpkgs pinned via flake.lock; cuda/rocm/rocm-gfx1151 deferred (FT-5) | in flight (rescoped) |
 | `ci-checks.yml` | fast: loader/catalog sync (dedup from 4 old files), python lint (tools/*.py), actionlint + zizmor on workflow YAML | TODO (phase 2) |
 | `ci-webui.yml` | node 22: npm ci + svelte-check + vite build (`webui/native`, has `check` script) | TODO (phase 2) |
 | `ci-docker.yml` | PR-only buildx build (no push) to validate Dockerfiles | TODO (phase 2) |
@@ -190,6 +190,18 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
   `0fe8845`).
 - **FT-3: sm_75 Docker images** (bugs doc #1) — product issue, file upstream, out of scope
   for the CI refactor (CI itself uses an explicit arch).
+- **FT-4: aarch64-linux nix cross-builds** — `nix build .#cpu --system aarch64-linux`
+  etc. not covered by ci-nix.yml (referenced in that file's header).
+- **FT-5: nix cuda/rocm/rocm-gfx1151 package coverage** — never in CI before (old
+  nix-build.yml only did cpu+vulkan); the nixpkgs toolkit stacks are very heavy to
+  build, and the 16-core runners we tried for them sat queued 12h+ (public-repo
+  larger-runner pool flaky). Jobs removed from ci-nix.yml for now (TODO marker in
+  the file); re-add with a proven runner strategy.
+- **FT-6: windows cuda manual job verification** — the cuda job in ci-windows.yml is
+  gated to workflow_dispatch (llama.cpp precedent: heavy). It has never actually run
+  green yet: choco `cuda --version=12.9.0.576` install is unverified. Run it via the
+  Actions UI (or API dispatch once the workflow is on a default branch) and confirm
+  the build; fallback install = llama.cpp's NVIDIA redist-zip action pattern.
 
 ## 8. Immediate next steps (state as of 2026-08-15 ~22:30 UTC)
 
@@ -200,28 +212,41 @@ Done since last update:
 - First macos/windows runs failed (toolchain workarounds, gotcha #5) → fixed in `cc7d073`
   (mac: OpenMP OFF; windows: via build_windows.ps1 + pinned LunarG SDK install).
 
-In flight (branch `ci/linux-workflow`):
-- CI (macos) run 31911868719 (post-fix), CI (windows) run 31911868644 (post-fix)
-- CI (nix) run 31911392633 (queued on a 16-core runner; 7 jobs incl. rocm/cuda/metal —
-  all never-covered nix packages; same defer-and-log policy applies if any fail)
-- The 3 old workflows (mac-build/windows-build/nix-build) still run on every `ci/**` push
-  (no path filters) — noise; delete each as its replacement proves green (linux done).
+Run results on 653ee10 (2026-08-16 morning):
+- CI (linux) ✅ green (re-confirmed after the assets-test fix)
+- CI (windows): cpu ✅ (8.3-path test fix works), vulkan ✅ (LunarG SDK install works),
+  cuda ❌ → **root cause: windows-2025 image has NO CUDA toolkit** (assumption was
+  wrong). Fixed in 25b1d26: cuda job split out, gated to workflow_dispatch
+  (llama.cpp precedent, see their build-cuda-windows.yml header), installs
+  `choco cuda --version=12.9.0.576` (Dockerfile pin) before building. FT-6 = verify.
+- CI (macos): metal (arm64) ❌ — **log blobs lost (BlobNotFound), cause unknown**;
+  cpu (x64) job cancelled after ~2h on the macos-15-intel queue (runner scarcity,
+  noted in the workflow header). Fresh run triggered by the nix-rescope push
+  (comment bump in ci-macos.yml re-triggers via path filter) — get its metal log.
+- CI (nix): sat queued 12h+ (16-core pool); rescoped in this commit: only
+  cpu/vulkan/python-scripts (linux) + metal (macos) for now; cuda/rocm/rocm-gfx1151
+  → FT-5 (never covered, heavy).
 
 Next:
-1. Watch the 3 runs above. On green: delete the matching old workflow (one commit each),
-   push, verify.
-   - ci-macos green → delete `mac-build.yml` (then the old macOS noise stops)
-   - ci-windows green → delete `windows-build.yml`
-   - ci-nix green → delete `nix-build.yml`
-   - If any job fails on never-covered ground → apply the user policy: defer that job
-     (build-only or remove), add an FT-x entry here + wip/ci-bugs-found.md, re-push just
-     that workflow file (path filters make re-runs surgical).
-   - If mac/windows **ctest** fails (new coverage, never ran before): same policy.
-2. Then phase 2: ci-checks.yml (loader/spec sync dedup — NOTE: it's the ONLY copy of that
-   check once all old workflows are deleted, so land it before the last deletion),
-   ci-webui.yml, ci-docker.yml (PR-only buildx).
-3. Before the upstream PR — drop `wip/`, decide branch protection/required checks with
-   maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs non-required).
+1. Watch the fresh CI (macos) + CI (nix) runs (this push). If metal fails again:
+   read the log (gh works now: `gh auth token` → curl the job logs API, or the UI),
+   diagnose; if it's never-covered ground → defer+log per policy.
+   If nix metal/python-scripts fail → same policy.
+2. On green: delete the matching old workflow (one commit each): ci-macos →
+   `mac-build.yml`, ci-windows → `windows-build.yml`, ci-nix → `nix-build.yml`.
+   NOTE: loader/spec sync check lives ONLY in the old workflows — land
+   ci-checks.yml (phase 2) before the LAST deletion so coverage isn't lost.
+3. Manual: run the windows cuda dispatch job once (FT-6).
+4. Then phase 2: ci-checks.yml, ci-webui.yml, ci-docker.yml (PR-only buildx).
+5. Before the upstream PR — drop `wip/`, decide branch protection/required checks
+   with maintainers (suggest: ci-linux cpu + ci-checks required; GPU jobs
+   non-required).
+
+Log access (now working): `gh` is authenticated (account xashr, GH_TOKEN).
+Job logs: `curl -H "Authorization: Bearer $(gh auth token)" \
+  https://api.github.com/repos/xashr/audio.cpp/actions/jobs/<id>/logs`
+(or `gh run view <run> --log-failed`). Note: log blobs can vanish (BlobNotFound
+seen on the first macos run) — pull logs while the run is fresh.
 
 ## 9. Environment facts (dev machine)
 

@@ -7,6 +7,9 @@
 # Runner notes:
 #   - macos-15-intel is a hard pin: Apple ended Intel Mac support with macOS 15,
 #     so there is no newer x64 runner to move to (llama.cpp pins it too).
+#     The Intel runner pool is small: the x64 job can wait a long time for a
+#     runner (observed 2h+ on 2026-08-15). If that becomes chronic, drop the
+#     x64 job (arm64 is the primary macOS platform) - future task candidate.
 #   - macos-latest is used (not pinned) so the arm64 job tracks the current
 #     Apple silicon runner.
 #
