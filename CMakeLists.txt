@@ -2634,7 +2634,11 @@ if (ENGINE_BUILD_TESTS)
     # Heavy model-inference test: ran >600 s on macos-15-intel (AppleClang has
     # no OpenMP runtime, so the macOS builds run it single-threaded;
     # observed timeout in CI 2026-08-16). 1800 s is generous headroom.
-    set_tests_properties(supertonic_vector_convnext_exp_test PROPERTIES TIMEOUT 1800)
+    # The "slow_ci" label lets the macOS x64 job exclude it (scarce Intel
+    # runner pool); its parity is still covered by linux x64, windows and
+    # macOS metal.
+    set_tests_properties(supertonic_vector_convnext_exp_test
+        PROPERTIES TIMEOUT 1800 LABELS "slow_ci")
 endif()
 
 if (ENGINE_BUILD_EXAMPLES)

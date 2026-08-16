@@ -85,11 +85,17 @@ jobs:
             enable_metal: "ON"
             ccache_key: macos-arm64-metal
             timeout_minutes: 240
+            ctest_args: ""
           - name: cpu (x64)
             runs_on: macos-15-intel
             enable_metal: "OFF"
             ccache_key: macos-x64-cpu
             timeout_minutes: 300
+            # The supertonic model-inference test (label "slow_ci") runs
+            # single-threaded here (OpenMP off on macOS) and takes 20-30 min
+            # on the scarce Intel runner pool; its parity is still covered by
+            # the linux x64, windows and macOS metal jobs.
+            ctest_args: "-LE slow_ci"
 
     steps:
       - name: Checkout
@@ -137,4 +143,6 @@ jobs:
           cd build
           # Per-test timeouts are set in CMake (600 s default, 1800 s for the
           # heavy supertonic test); a global --timeout would override them.
-          ctest --output-on-failure
+          # ${{ matrix.ctest_args }} excludes the slow model-inference test
+          # on the cpu (x64) job (see matrix note).
+          ctest --output-on-failure ${{ matrix.ctest_args }}
