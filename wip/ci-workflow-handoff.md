@@ -216,20 +216,21 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
   Actions UI (or API dispatch once the workflow is on a default branch) and confirm
   the build; fallback install = llama.cpp's NVIDIA redist-zip action pattern.
 
-## 8. State + immediate next steps (updated 2026-08-16 ~11:00 UTC)
+## 8. State + immediate next steps (updated 2026-08-16 ~13:40 UTC — ALL GREEN)
 
-### Status board (branch `ci/linux-workflow`, tip 84796b1)
+### Status board (branch `ci/linux-workflow`, tip 53829f6) — **ALL FIVE WORKFLOWS GREEN (2026-08-16 13:33 UTC)**
 
 | Workflow | State |
 |---|---|
-| CI (linux) | ✅ green (run 31910114679, re-confirmed on 653ee10) |
-| CI (windows) | ✅ green (run 31940775162 on 25b1d26: cpu+ctest, vulkan; cuda job correctly skipped on push) |
-| CI (nix) | ✅ **green** (run 31940963702 on 406deb4: cpu, vulkan, python-scripts, metal) |
-| CI (checks) | ✅ green (re-confirmed every push) |
-| CI (macos) | metal ✅ green in 13 min (ed3d563 & 09e58a0); x64 ❌ supertonic >1800 s on Intel → now excluded there (slow_ci label, -LE on x64 only) |
-| CI (linux) | ✅ green on ed3d563; ❌ on 09e58a0 (audio_dsp flake, not a timeout change — see bugs #13) → tolerances fixed, 0/300 local |
-| CI (windows) | ✅ green (09e58a0) |
-| CI (nix) | ✅ green (09e58a0) |
+| CI (linux) | ✅ green (run 31948808361 on 8dff9e4: cpu x64+ctest, cpu arm64, vulkan x64/arm64, CUDA container ~30 min) |
+| CI (macos) | ✅ green (run 31948808345: metal arm64 ~13 min; cpu x64 ~20 min, supertonic excluded via slow_ci) |
+| CI (windows) | ✅ green (run 31948808369: cpu+ctest, vulkan; cuda job dispatch-only = FT-6) |
+| CI (nix) | ✅ green (run 31948808362: cpu, vulkan, python-scripts, metal) |
+| CI (checks) | ✅ green (run 31948931704: sync + actionlint; download hardened in 53829f6) |
+
+The core refactor goal is met: per-domain workflows, tests actually running (linux x64,
+macos x64 + metal, windows cpu), build coverage for CPU/Vulkan/Metal/CUDA, old workflows
+retired, hygiene layer in place. Remaining work = phase 2 + FT list + upstream PR prep.
 
 ### RESOLVED (pending green run): CI (macos) build failure = runner process-limit exhaustion
 
@@ -291,18 +292,26 @@ Fix pushed (**ed3d563**):
     slow test runs on linux/windows/metal, is excluded only on the scarce Intel x64 job.
     Verified: `ctest -LE slow_ci` = 49 tests, `-L slow_ci` = 1.
 
+### 8dff9e4/53829f6 results: all green (2026-08-16 13:33 UTC)
+
+- audio_dsp tolerance fix held on the CI host (no flakes); supertonic exclusion works
+  (x64 job ~20 min total vs 49 min with the timeout); one transient: the 8dff9e4 checks
+  run failed on a truncated actionlint download (runner network hiccup) → hardened in
+  53829f6 (curl --retry 5 + `gzip -t` verify before extract).
+
 Next steps:
-1. Watch the 8dff9e4 runs (linux/macos/windows/nix re-triggered via CMakeLists path
-   filter): expect **all green for the first time across the board** — x64 job is now
-   ~11 min build + ~10 min ctest (no supertonic). metal ~13 min. If audio_dsp flakes
-   again at 5e-5/5e-6 (shouldn't — 0/300 local), next lever: ctest `RETRY_COUNT 1`.
-2. Once all 5 workflows green → **phase 2**: ci-webui.yml (SvelteKit in webui/native:
-   npm ci + svelte-check + vite build), ci-docker.yml (PR-only buildx build of the
-   Dockerfiles).
-3. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
-   12.9.0.576 install unverified).
-4. If EAGAIN ever recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show
-   the headroom → drop to -j2.
+1. **Phase 2**: ci-webui.yml (SvelteKit in webui/native — check package.json scripts
+   first: expect npm ci + svelte-check + vite build), ci-docker.yml (PR-only buildx
+   build of the Dockerfiles; no push — docker.yml stays the daily publisher).
+2. Manual (user): run the windows **cuda dispatch job** once from the Actions UI
+   (FT-6; choco cuda 12.9.0.576 install unverified).
+3. Fallbacks if things recur: audio_dsp flake → ctest `RETRY_COUNT 1`; macOS EAGAIN at
+   -j4 → the printed `ulimit -a`/`kern.maxproc*` lines show headroom → -j2.
+4. Before the upstream PR: drop `wip/`; decide required checks with maintainers
+   (suggest: CI (linux) cpu + CI (checks) required; GPU/slow jobs non-required);
+   PR narrative: new test coverage surfaced real bugs (bugs doc: sm_75 docker images,
+   arm64 audio math, istft parity tolerances, windows 8.3 paths) + the FT list is the
+   follow-up plan.
 
 ### Done since the 22:30 note (2026-08-16)
 - 653ee10 results: linux ✅; windows cpu ✅ (the 8.3-path test fix works) + vulkan ✅
