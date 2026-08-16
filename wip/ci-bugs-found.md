@@ -181,9 +181,41 @@ pre-existing 120/180/300/60 s values), 1800 s for supertonic. The workflows' glo
 `ctest --timeout 600` was removed (it would override per-test properties) — timeouts
 now live in CMake, so local `ctest` behaves like CI.
 
+Follow-up: the 1800 s budget was NOT enough — the next x64 run (09e58a0) timed out at
+1800.04 s (test needs >30 min single-threaded on that Intel runner). So the test is
+now **excluded on the macos x64 job**: CMake labels it `slow_ci` (alongside
+`TIMEOUT 1800`), and ci-macos.yml passes `ctest_args: "-LE slow_ci"` for the x64
+matrix entry only (metal job runs it — it fits there). Parity coverage for this model
+remains on linux x64, windows cpu and macos metal. Re-enable later if the Intel pool
+improves (drop the `-LE` flag).
+
 ---
 
-## 12. CI never covered GPU backends → silent bit-rot  [process note]
+## 13. audio_dsp_test flakes: istft parity tolerances at the float32 noise floor  [FIXED]
+
+CI (linux) cpu (x64) failed on 09e58a0: `istft_variant_parity drift too large:
+max_diff=1.98632e-05 mean_diff=2.12507e-06` (old tolerances: max 2e-5 / mean 2e-6 —
+mean exceeded by 6%, max within 1%). NOT caused by the concurrent CMake timeout change
+(timeouts can't affect numerics); the test's `test_istft_matches_reference_across_configs_and_variants`
+uses `WaveformMode::PerRun` — the input is **time-seeded random** (`steady_clock` →
+mt19937), so the float32 accumulation noise of fast-ISTFT vs naive-reference varies per
+run and occasionally crosses the tight tolerances (which sat at the noise floor).
+
+Measured locally (x86, 24 cores): with old tolerances **22/300 runs failed** — all
+max_diff violations (2.00e-5 … 2.18e-5; the natural max-noise peak is ~2e-5); after
+raising the mean tolerance to 5e-6 alone, max violations continued. Fix (8dff9e4):
+**max 5e-5 / mean 5e-6** (comment in the test explains the measurement). Real parity
+bugs (wrong overlap-add/normalization/window) produce O(>=1e-3) diffs → the check
+stays strict. Verified **0/300** failures after the fix.
+
+Note: the other two sub-checks (log_mel, stft_istft_round_trip) use `WaveformMode::Fixed`
+(deterministic) inputs → no per-run flake risk; left at their tolerances. If the
+upstream maintainers prefer, the alternative is a deterministic seed per variant
+(gives up the intentional per-run fuzzing) or ctest `RETRY_COUNT 1`.
+
+---
+
+## 14. CI never covered GPU backends → silent bit-rot  [process note]
 
 Pre-refactor CI built cpu/vulkan only. CUDA/HIP/Metal/Windows-GPU code paths had zero build
 verification (they only compiled when Docker builds happened to pass). The new

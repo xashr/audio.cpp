@@ -226,8 +226,10 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 | CI (windows) | ✅ green (run 31940775162 on 25b1d26: cpu+ctest, vulkan; cuda job correctly skipped on push) |
 | CI (nix) | ✅ **green** (run 31940963702 on 406deb4: cpu, vulkan, python-scripts, metal) |
 | CI (checks) | ✅ green (re-confirmed every push) |
-| CI (macos) | metal ✅ **green in 13 min** (ed3d563); x64 ❌ supertonic test 600 s timeout → fixed 09e58a0, re-run in flight |
-| CI (linux) | ✅ green on ed3d563 (control run: ccache step now skipped on ci/**) |
+| CI (macos) | metal ✅ green in 13 min (ed3d563 & 09e58a0); x64 ❌ supertonic >1800 s on Intel → now excluded there (slow_ci label, -LE on x64 only) |
+| CI (linux) | ✅ green on ed3d563; ❌ on 09e58a0 (audio_dsp flake, not a timeout change — see bugs #13) → tolerances fixed, 0/300 local |
+| CI (windows) | ✅ green (09e58a0) |
+| CI (nix) | ✅ green (09e58a0) |
 
 ### RESOLVED (pending green run): CI (macos) build failure = runner process-limit exhaustion
 
@@ -272,18 +274,35 @@ Fix pushed (**ed3d563**):
   `ctest --timeout 600` from all 3 workflows (it would override per-test values).
   Verified locally: all 50 tests carry an explicit TIMEOUT in CTestTestfile.cmake.
 
+### 09e58a0 results + the two follow-up fixes (pushed as 2 commits → tip 8dff9e4)
+
+- **CI (macos) x64**: supertonic **timed out at 1800.04 s** — it needs >30 min
+  single-threaded on the Intel runner → skipping is mandatory, not economics.
+- **CI (linux) cpu (x64)**: `audio_dsp_test` FAILED — `istft_variant_parity`
+  mean_diff 2.125e-6 vs 2e-6 tolerance. Root cause (bugs #13): that sub-check uses
+  `WaveformMode::PerRun` (time-seeded random input) with tolerances sitting AT the
+  float32 noise floor → 22/300 local runs failed (max_diff peaks ~2.2e-5 > old 2e-5
+  max). Unrelated to the CMake timeout change.
+- Fixes pushed (tip **8dff9e4**):
+  - `tests/unittests/test_audio_dsp.cpp`: istft parity tolerances → **max 5e-5 / mean
+    5e-6** (measured noise floor + margin; real bugs are O(≥1e-3)). **0/300 local.**
+  - `CMakeLists.txt`: supertonic test gets `LABELS "slow_ci"` (keeps `TIMEOUT 1800`).
+  - `ci-macos.yml`: matrix field `ctest_args` ("" metal / `"-LE slow_ci"` x64) → the
+    slow test runs on linux/windows/metal, is excluded only on the scarce Intel x64 job.
+    Verified: `ctest -LE slow_ci` = 49 tests, `-L slow_ci` = 1.
+
 Next steps:
-1. Watch the 09e58a0 runs: CI (macos) x64 should now pass supertonic within 1800 s
-   (total job ≈ 11 min build + ~15 min tests + up to 30 min supertonic < 300 min
-   timeout); metal re-runs (~13 min, expect green); linux/windows/nix re-run on the
-   CMakeLists path filter (expect green — the timeout change is inert on those runners
-   where every test already fits in 600 s).
-2. If EAGAIN ever recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show
-   the headroom → drop to -j2.
-3. If the x64 supertonic test STILL times out at 1800 s → user policy: defer
-   (FT entry: skip it on macOS x64, e.g. LABELS + `-LE` in that job only).
-4. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
+1. Watch the 8dff9e4 runs (linux/macos/windows/nix re-triggered via CMakeLists path
+   filter): expect **all green for the first time across the board** — x64 job is now
+   ~11 min build + ~10 min ctest (no supertonic). metal ~13 min. If audio_dsp flakes
+   again at 5e-5/5e-6 (shouldn't — 0/300 local), next lever: ctest `RETRY_COUNT 1`.
+2. Once all 5 workflows green → **phase 2**: ci-webui.yml (SvelteKit in webui/native:
+   npm ci + svelte-check + vite build), ci-docker.yml (PR-only buildx build of the
+   Dockerfiles).
+3. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
    12.9.0.576 install unverified).
+4. If EAGAIN ever recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show
+   the headroom → drop to -j2.
 
 ### Done since the 22:30 note (2026-08-16)
 - 653ee10 results: linux ✅; windows cpu ✅ (the 8.3-path test fix works) + vulkan ✅
