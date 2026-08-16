@@ -2620,6 +2620,21 @@ if (ENGINE_BUILD_TESTS)
             COMMAND server_model_installer_test
         )
     endif()
+
+    # ctest timeouts: cap every test at 600 s so a hung test cannot block a CI
+    # job until the runner-level timeout. Tests that already carry an explicit
+    # TIMEOUT (http_live_body_test, SDPA, the fun_asr_nano probes) keep it.
+    get_property(engine_all_tests DIRECTORY PROPERTY TESTS)
+    foreach (_engine_test IN LISTS engine_all_tests)
+        get_property(_engine_test_timeout TEST ${_engine_test} PROPERTY TIMEOUT)
+        if (NOT DEFINED _engine_test_timeout OR _engine_test_timeout STREQUAL "")
+            set_tests_properties(${_engine_test} PROPERTIES TIMEOUT 600)
+        endif()
+    endforeach()
+    # Heavy model-inference test: ran >600 s on macos-15-intel (AppleClang has
+    # no OpenMP runtime, so the macOS builds run it single-threaded;
+    # observed timeout in CI 2026-08-16). 1800 s is generous headroom.
+    set_tests_properties(supertonic_vector_convnext_exp_test PROPERTIES TIMEOUT 1800)
 endif()
 
 if (ENGINE_BUILD_EXAMPLES)

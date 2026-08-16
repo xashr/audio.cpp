@@ -135,7 +135,9 @@ jobs:
         if: ${{ matrix.run_tests }}
         run: |
           cd build
-          ctest --output-on-failure --timeout 600
+          # Per-test timeouts are set in CMake (600 s default, 1800 s for the
+          # heavy supertonic test); a global --timeout would override them.
+          ctest --output-on-failure
 
   cuda:
     name: CUDA (x64)

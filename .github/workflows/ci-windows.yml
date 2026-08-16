@@ -117,7 +117,9 @@ jobs:
         if: ${{ matrix.run_tests }}
         shell: pwsh
         run: |
-          ctest --test-dir "build/${{ matrix.preset }}" --output-on-failure --timeout 600
+          # Per-test timeouts are set in CMake (600 s default, 1800 s for the
+          # heavy supertonic test); a global --timeout would override them.
+          ctest --test-dir "build/${{ matrix.preset }}" --output-on-failure
 
   # Manual-dispatch only, like llama.cpp's build-cuda-windows.yml ("very
   # heavy on the CI"): the runner image ships no CUDA toolkit, so the job
