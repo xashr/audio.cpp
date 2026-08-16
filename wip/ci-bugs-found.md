@@ -138,22 +138,31 @@ generator.
 
 ---
 
-## 9. CI (macos) build hangs on GitHub macOS runners  [OPEN — CI/infra]
+## 9. CI (macos) build fails: runner process limit exhausted (posix_spawn EAGAIN)  [OPEN — CI/infra]
 
-Run 31940963758 (2026-08-16): both jobs (metal arm64 on macos-latest, cpu x64 on
-macos-15-intel) passed Configure, then sat in **Build** with no log output for 38+ min;
-the metal job's log showed "cancelled" (120-min job timeout). The previous day's metal
-run built fine (~40 min to the Test step) — not deterministic.
+Run 31940963758 (2026-08-16), metal (arm64) job — user-pasted log tail:
+```
+clang++: error: unable to execute command: posix_spawn failed: Resource temporarily unavailable
+make[2]: *** [CMakeFiles/engine_core.dir/src/framework/audio/dsp.cpp.o] Error 1
+```
+(i.e. `EAGAIN` — the runner user's **process limit** was exhausted while make fanned out
+~10-12 parallel `ccache→clang` process trees; the build then failed and the runner
+printed "Error: The operation was canceled." while tearing down). The cpu (x64) job was
+still running at 77% build when the fix push cancelled it (slow Intel, same exposure).
 
-Complicating factor: **macOS job log blobs are lost** (BlobNotFound on both macos runs,
-windows logs fine) → the user's Actions UI is the only way to see live logs.
+Why it looked like a hang: the macOS job log STREAM stalls (and the log blobs are lost
+server-side: BlobNotFound on every attempt for both macos runs, windows logs fine) →
+from our side the job just "sat in Build"; the user's UI showed the real errors.
+Yesterday's run squeaked under the limit (46 min to Test); today's didn't → flaky,
+load-dependent. Earlier hypotheses (macos-latest flip / ccache bug / infra stall) are
+DISPROVED — the nix metal package built fine on macos-latest the same day, and the
+EAGAIN error names the mechanism directly.
 
-Hypotheses: (1) `macos-latest` label flipped to a new macOS/Xcode (new clang/xcrun-metal
-hang); (2) ccache hang on macOS; (3) runner infra stall. Counter-evidence for (1) on the
-arm64 job: the nix `metal` package built fine on macos-latest the same day (different
-build path: nix stdenv + no ccache). Planned: pin `macos-15`, add env-diagnostics step
-(sw_vers/xcodebuild/clang/ccache versions), one run without ccache to test (2).
-State: see handoff §8 (top open item).
+Fix applied (same push): Build step now caps `--parallel 4` (uncapped = CPU count),
+raises the soft FD limit (`ulimit -n 10240`), prints `ulimit -a` / `kern.maxproc`
+/ process count as diagnostics, and per-job timeouts raised (metal 240, x64 300 min).
+OPEN until a run with these changes is green; if EAGAIN recurs at -j4, the printed
+limits tell us the headroom (consider -j2 or dropping ccache for one diagnostic run).
 
 ---
 

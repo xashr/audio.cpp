@@ -26,11 +26,10 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 | Workflow | Contents | Status |
 |---|---|---|
 | `ci-linux.yml` | cpu x64 (build+ctest), cpu arm64 (build-only*), vulkan x64/arm64 (build-only), CUDA container (build-only, arch=89). *arm64 ctest + HIP job deferred, see Future Tasks (FT-1/FT-2) | ✅ **green** (run 31910114679) |
-| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, ccache, **OpenMP OFF** (AppleClang, gotcha #5) | ⏳ **build hangs on runner** (see §8) |
+| `ci-macos.yml` | macos-latest arm64 (Metal ON) + macos-15-intel (Metal OFF), build+ctest, **OpenMP OFF** (AppleClang, gotcha #5), ccache gated (main/dev+PR only), -j4 cap | ❌→fix in flight (ed3d563, see §8) |
 | `ci-windows.yml` | windows-2025: cpu (build+ctest) ✅, vulkan (pinned LunarG SDK, build-only) ✅, cuda (manual dispatch only: choco toolkit + build, llama.cpp precedent) — all via `scripts/build_windows.ps1` | ✅ green (cuda unverified, FT-6) |
 | `ci-nix.yml` | cpu, vulkan, python-scripts (linux x64) + metal (macos-latest); nixpkgs pinned via flake.lock; cuda/rocm/rocm-gfx1151 deferred (FT-5) | ✅ **green** (all 4 jobs) |
-| `ci-checks.yml` | loader/catalog sync (deduped from the 4 old files) + actionlint on workflow YAML; ~30s, no path filter | one-line glob fix pushed (84796b1), re-run pending |
-| `ci-checks.yml` | fast: loader/catalog sync (dedup from 4 old files), python lint (tools/*.py), actionlint + zizmor on workflow YAML | TODO (phase 2) |
+| `ci-checks.yml` | fast: loader/catalog sync (deduped from the 4 old files) + actionlint on workflow YAML; ~30s, no path filter | ✅ green (31942542959) |
 | `ci-webui.yml` | node 22: npm ci + svelte-check + vite build (`webui/native`, has `check` script) | TODO (phase 2) |
 | `ci-docker.yml` | PR-only buildx build (no push) to validate Dockerfiles | TODO (phase 2) |
 | `ci-sanitizers.yml` | ASan/TSan/UBSan matrix (PR-only) | TODO (phase 3, optional) |
@@ -226,56 +225,45 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 | CI (linux) | ✅ green (run 31910114679, re-confirmed on 653ee10) |
 | CI (windows) | ✅ green (run 31940775162 on 25b1d26: cpu+ctest, vulkan; cuda job correctly skipped on push) |
 | CI (nix) | ✅ **green** (run 31940963702 on 406deb4: cpu, vulkan, python-scripts, metal) |
-| CI (checks) | 🔧 glob bug fixed in 84796b1 (pushed); re-run pending — ~30s job, check first |
-| CI (macos) | ⏳ **HUNG — see below** |
+| CI (checks) | ✅ green (31942542959 on 84796b1; 31942842993 on cee3273) |
+| CI (macos) | ❌ metal failed (process-limit EAGAIN, root-caused) → fix pushed ed3d563, run in flight |
 
-### OPEN TOP ITEM: CI (macos) build hangs on the runners
+### RESOLVED (pending green run): CI (macos) build failure = runner process-limit exhaustion
 
-Run **31940963758** (406deb4, started 10:10Z): both jobs passed Checkout/ccache/
-Configure and sat in **Build** 38+ min with **no further log output** (user checked the
-live UI: no running process; the metal job's log even showed "cancelled" — likely the
-120-min job timeout cancelling it while the other kept hanging).
+Run 31940963758 metal (arm64) job (user-pasted log tail):
+`clang++: error: unable to execute command: posix_spawn failed: Resource temporarily
+unavailable` → **EAGAIN: the runner user's process (and/or FD) limit was exhausted**
+while make fanned out uncapped `--parallel` (= CPU count) × `make→ccache→clang→cc1`
+process trees. Flaky/load-dependent (yesterday's identical build squeaked through at
+46 min; today's died in the Build step). The "hang" impression was the macOS log stream
+stalling (gotcha #6) — the job was failing, not stuck.
 
-Key facts:
-- The PREVIOUS metal run (653ee10, yesterday) built fine (~40 min to the Test step,
-  then failed in a test — that failure log is also lost, BlobNotFound). So the build is
-  not deterministically broken; something changed in the runner environment.
-- Old `mac-build` was macos-14 (**arm64**), Metal OFF, Debug, 3 targets, no tests →
-  ~10-15 min. New: Metal ON + Release + all targets + 50 test binaries + cold ccache
-  (caches only save on main), and the x64 job runs on Intel (slower; the old build never
-  used Intel).
-- macOS job logs are unusable from our side (BlobNotFound, gotcha #6) — the user's UI is
-  the only live window.
+Fix pushed (**ed3d563**):
+- Build step: `cmake --build build --parallel 4` (was uncapped) + `ulimit -n 10240`
+  + diagnostics printed (`ulimit -a`, `kern.maxproc`, `kern.maxprocperuid`,
+  `ps -A | wc -l`) → if it recurs, the log shows the actual limits to re-tune.
+- Per-job timeouts: metal 240, x64 300 min (headroom for the slower capped builds).
+- **ccache step gated** to contexts where a warm cache can exist
+  (push main/dev + PRs; see `if:` in ci-macos.yml / ci-linux.yml). Rationale:
+  - ccache = compiler cache (hashes TU+flags, reuses .o); the action uploads/downloads
+    it via the GitHub per-repo cache. `save:` only on main pushes.
+  - On ci/** test-branch runs the cache can NEVER be warm → pure overhead, and the
+    extra per-compile process fan-out (ccache stays alive around each clang) aggravated
+    the EAGAIN failure. Skipped on test pushes; active again on main/dev + PRs where it
+    is worth 3-6× on PR builds (esp. macOS).
+  - Note: the ci/** push that triggered the fix run also re-runs CI (linux) as a control
+    (same build, ccache step now skipped) — expect green.
 
-Hypotheses (ranked):
-1. **`macos-latest` label flipped** to a newer macOS/Xcode between yesterday and today
-   (gotcha #8) — new clang/xcrun-metal could hang. The x64 job (macos-15-intel, pinned)
-   hangs too, which argues against a pure arm64/Xcode-26 issue unless the flip affects
-   both pools… or it's hypothesis 2/3.
-2. **ccache hang on macOS** (ccache-action + AppleClang; works in llama.cpp but their
-   image/version mix may differ).
-3. GitHub macOS runner infra stall (both jobs on different pools hanging simultaneously
-   is suspicious; could also be a repo-level Actions hiccup).
-
-Next steps (in order):
-1. Check the final state of run 31940963758 (both jobs should end "cancelled" at the
-   120-min timeout) and the CI (checks) re-run (84796b1) — expect green.
-2. **Ask the user for the last ~20 lines of each job's log from the UI** — the last line
-   localizes the hang: stuck mid-`.metal` shader compile → Xcode/xcrun (hypothesis 1);
-   stuck before any compile line (cmake/ninja banner only) → cmake level; stuck at the
-   first object file → ccache (hypothesis 2).
-3. Apply the fix + diagnostics in ONE push to ci-macos.yml (re-triggers via path filter):
-   - pin `macos-15` instead of `macos-latest` for the arm64 job (reproducible; kills
-     hypothesis 1; macos-15 is still a supported pool — llama.cpp-style macos-latest
-     only if the team wants to track newest)
-   - add a diagnostic step right after Checkout: `sw_vers; xcodebuild -version; clang
-     --version; ccache --version; uname -m; sysctl -n hw.ncpu` → the next run's log
-     self-documents the environment
-   - optionally ONE diagnostic run with the ccache step removed (test hypothesis 2);
-     re-add after.
-4. If the metal job finally completes and ctest FAILS with a never-covered test issue →
-   user policy: defer that test/job, FT entry, keep going.
-5. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
+Next steps:
+1. Watch the new CI (macos) run (ed3d563). The old in-progress x64 job was cancelled by
+   the push (concurrency). Expected: metal builds in ~60-90 min at -j4 (no ccache),
+   then ctest; x64 is slow (Intel) + scarce pool (2h+ queue observed).
+2. If the build is green but **ctest fails** → finally see which metal test(s) fail
+   (yesterday's failure at the Test step was never readable, log lost). User policy:
+   never-covered test issue → defer + FT entry.
+3. If EAGAIN recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show the
+   headroom → drop to -j2, or check the process count for a leak.
+4. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
    12.9.0.576 install unverified).
 
 ### Done since the 22:30 note (2026-08-16)
@@ -316,6 +304,6 @@ Next steps (in order):
   `upstream`=`0xShug0/audio.cpp`
 - 24-core x86_64, gcc 15.2, cmake 4.2.3, CUDA 13.3 toolkit + RTX 5090 (GPU memory occupied
   by invisible tenant — don't trust CUDA test *runs* here; builds are fine)
-- No docker, no sudo, no qemu, no gh CLI, network OK (GitHub API works unauthenticated for
-  this public repo's Actions status endpoints)
+- No docker, no sudo, no qemu. `gh` CLI **is installed and authenticated** (gotcha #6).
+  Network OK.
 - Local build dirs (gitignored): `build-ci-test/` (CPU green), `build-ci-cuda/` (CUDA green)
