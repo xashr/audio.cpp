@@ -20,6 +20,14 @@
 # OpenMP is OFF: AppleClang has no OpenMP runtime (find_package(OpenMP)
 # fails) - the same workaround the old mac-build.yml used.
 #
+# Build parallelism is capped at 4: uncapped `--parallel` (= CPU count) plus
+# the make/ccache/clang process tree exhausted the runner user's process
+# limit on 2026-08-16 ("clang++: error: unable to execute command:
+# posix_spawn failed: Resource temporarily unavailable"). The cap also keeps
+# capped builds well inside the generous per-job timeouts below.
+# The Build step prints ulimits/process counts so the limits can be re-tuned
+# from the logs.
+
 # The old mac-build.yml is kept until this workflow is proven green.
 
 name: CI (macos)
@@ -67,7 +75,7 @@ jobs:
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.runs_on }}
-    timeout-minutes: 120
+    timeout-minutes: ${{ matrix.timeout_minutes }}
     strategy:
       fail-fast: false
       matrix:
@@ -76,16 +84,26 @@ jobs:
             runs_on: macos-latest
             enable_metal: "ON"
             ccache_key: macos-arm64-metal
+            timeout_minutes: 240
           - name: cpu (x64)
             runs_on: macos-15-intel
             enable_metal: "OFF"
             ccache_key: macos-x64-cpu
+            timeout_minutes: 300
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # ccache only where a warm cache can exist (pushes to main/dev save it,
+      # PRs read it). On ci/** test-branch pushes it would be cold pure
+      # overhead and its extra per-compile process fan-out aggravated the
+      # macOS posix_spawn limit failure (2026-08-16).
       - name: ccache
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' &&
+           (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'))
         uses: ggml-org/ccache-action@v1.2.21
         with:
           key: ${{ matrix.ccache_key }}
@@ -103,7 +121,16 @@ jobs:
 
       - name: Build
         run: |
-          cmake --build build --parallel
+          # Diagnostics: the 2026-08-16 posix_spawn EAGAIN failure - if it
+          # recurs, these lines show the actual limits and process count.
+          ulimit -a
+          sysctl kern.maxproc kern.maxprocperuid 2>/dev/null || true
+          ps -A | wc -l
+          # Raise the soft file-descriptor limit (spawn also consumes FDs);
+          # no-op if already at the hard limit.
+          ulimit -n 10240 2>/dev/null || true
+          # Capped parallelism: see header (process-limit exhaustion).
+          cmake --build build --parallel 4
 
       - name: Test
         run: |

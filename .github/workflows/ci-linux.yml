@@ -100,7 +100,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
+      # ccache only where a warm cache can exist (see ci-macos.yml note):
+      # main/dev pushes save it, PRs read it; test-branch pushes skip it.
       - name: ccache
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' &&
+           (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'))
         uses: ggml-org/ccache-action@v1.2.21
         with:
           key: ${{ matrix.ccache_key }}
@@ -150,6 +156,10 @@ jobs:
             build-essential cmake ninja-build git libgomp1
 
       - name: ccache
+        if: >-
+          github.event_name == 'pull_request' ||
+          (github.event_name == 'push' &&
+           (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'))
         uses: ggml-org/ccache-action@v1.2.21
         with:
           key: linux-x64-cuda
