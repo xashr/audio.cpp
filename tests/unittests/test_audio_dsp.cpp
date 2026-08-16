@@ -345,8 +345,17 @@ void test_istft_matches_reference_across_configs_and_variants() {
             require_close(
                 reconstructed.values,
                 reference.values,
-                2.0e-5f,
-                2.0e-6,
+                // PerRun inputs are time-seeded, so the float32 accumulation
+                // noise of the fast ISTFT vs the naive reference varies per
+                // run. Measured over 300 local runs (2026-08-16): the max
+                // diff peaks at ~2.2e-5 (22/300 runs exceeded the old 2e-5
+                // max tolerance; one CI failure hit mean 2.1e-6 vs the old
+                // 2e-6 mean tolerance). The tolerances must sit above that
+                // noise floor: 5e-5 max / 5e-6 mean. Real parity bugs (wrong
+                // overlap-add/normalization/window) produce diffs of O(>=1e-3),
+                // so the check stays strict.
+                5.0e-5f,
+                5.0e-6,
                 "istft_variant_parity");
         }
     }
