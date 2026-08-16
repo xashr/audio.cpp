@@ -31,7 +31,7 @@ Per-domain workflows (llama.cpp style) + TF-style hygiene. One job = one (OS, ba
 | `ci-nix.yml` | cpu, vulkan, python-scripts (linux x64) + metal (macos-latest); nixpkgs pinned via flake.lock; cuda/rocm/rocm-gfx1151 deferred (FT-5) | ✅ **green** (all 4 jobs) |
 | `ci-checks.yml` | fast: loader/catalog sync (deduped from the 4 old files) + actionlint on workflow YAML; ~30s, no path filter | ✅ green (31942542959) |
 | `ci-webui.yml` | node 22: npm ci + svelte-check + vite build (`webui/native`, has `check` script) | TODO (phase 2) |
-| `ci-docker.yml` | PR-only buildx build (no push) to validate Dockerfiles | TODO (phase 2) |
+| `ci-docker.yml` | buildx build (no push) of the published Dockerfiles (cpu/cuda12/cuda13, amd64, `full` target) + runtime smoke test (`docker run --entrypoint /app/audiocpp_cli --help`); GHA cache; triggers: push main/dev/ci/** + PR main/dev, path-filtered (.devops/**, CMake, own file) | ✅ **green** (run 31976303609: cpu 10m, cuda13 29m, cuda12 33m cold) |
 | `ci-sanitizers.yml` | ASan/TSan/UBSan matrix (PR-only) | TODO (phase 3, optional) |
 | old `linux-build.yml` etc. | delete as replacements prove green | **ALL DELETED** (linux with its green run; mac/windows/nix on 2026-08-16 once cpu+vulkan/nix replacements were proven — user asked to stop them stealing runners) |
 | `docker.yml` | keep as-is | — |
@@ -218,7 +218,15 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 
 ## 8. State + immediate next steps (updated 2026-08-16 ~13:40 UTC — ALL GREEN)
 
-### Status board (branch `ci/linux-workflow`, tip 53829f6) — **ALL FIVE WORKFLOWS GREEN (2026-08-16 13:33 UTC)**
+### Status board (branch `ci/linux-workflow`, tip e18a9ae) — **ALL SIX WORKFLOWS GREEN (2026-08-16 23:00 UTC)**
+
+| Workflow | State |
+|---|---|
+| CI (docker) | ✅ green (run 31976303609 on e18a9ae: cpu 10m, cuda13 29m, cuda12 33m — cold; GHA cache now warm) |
+
+(Plus the five below, unchanged since 13:33 UTC.)
+
+### Previous status board (tip 53829f6, 13:33 UTC)
 
 | Workflow | State |
 |---|---|
@@ -299,10 +307,23 @@ Fix pushed (**ed3d563**):
   run failed on a truncated actionlint download (runner network hiccup) → hardened in
   53829f6 (curl --retry 5 + `gzip -t` verify before extract).
 
+### ci-docker added + green (e18a9ae, 2026-08-16 23:00 UTC)
+
+- New `ci-docker.yml`: buildx build (no push, amd64, `full` target) of the 3 published
+  Dockerfiles with the same args as docker.yml, + runtime smoke test
+  (`docker run --entrypoint /app/audiocpp_cli --help`), GHA cache (read-only on fork
+  PRs), path-filtered (.devops/**, CMake, own file) + workflow_dispatch.
+- Run 31976303609: all 3 jobs green (cpu 10m, cuda13 29m, cuda12 33m cold).
+  Confirmed: docker+buildx work fine on GH ubuntu runners; smoke test passes incl.
+  CUDA images (no GPU needed for --help). NOTE: binaries live at /app/<bin> in the
+  final image (COPY --from=build /app/full /app) — not /app/full/.
+- sm_75 note: the CUDA validation build compiles sm_75 (nvcc -arch=native on GPU-less
+  runner) = exactly what the published image does today (bugs #1); an explicit-arch
+  fix validates here.
+
 Next steps:
-1. **Phase 2**: ci-webui.yml (SvelteKit in webui/native — check package.json scripts
-   first: expect npm ci + svelte-check + vite build), ci-docker.yml (PR-only buildx
-   build of the Dockerfiles; no push — docker.yml stays the daily publisher).
+1. **Phase 2 (remaining)**: ci-webui.yml (SvelteKit in webui/native — check
+   package.json scripts first: expect npm ci + svelte-check + vite build).
 2. Manual (user): run the windows **cuda dispatch job** once from the Actions UI
    (FT-6; choco cuda 12.9.0.576 install unverified).
 3. Fallbacks if things recur: audio_dsp flake → ctest `RETRY_COUNT 1`; macOS EAGAIN at
