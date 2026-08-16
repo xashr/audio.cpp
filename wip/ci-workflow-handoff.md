@@ -225,8 +225,9 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 | CI (linux) | ✅ green (run 31910114679, re-confirmed on 653ee10) |
 | CI (windows) | ✅ green (run 31940775162 on 25b1d26: cpu+ctest, vulkan; cuda job correctly skipped on push) |
 | CI (nix) | ✅ **green** (run 31940963702 on 406deb4: cpu, vulkan, python-scripts, metal) |
-| CI (checks) | ✅ green (31942542959 on 84796b1; 31942842993 on cee3273) |
-| CI (macos) | ❌ metal failed (process-limit EAGAIN, root-caused) → fix pushed ed3d563, run in flight |
+| CI (checks) | ✅ green (re-confirmed every push) |
+| CI (macos) | metal ✅ **green in 13 min** (ed3d563); x64 ❌ supertonic test 600 s timeout → fixed 09e58a0, re-run in flight |
+| CI (linux) | ✅ green on ed3d563 (control run: ccache step now skipped on ci/**) |
 
 ### RESOLVED (pending green run): CI (macos) build failure = runner process-limit exhaustion
 
@@ -254,15 +255,33 @@ Fix pushed (**ed3d563**):
   - Note: the ci/** push that triggered the fix run also re-runs CI (linux) as a control
     (same build, ccache step now skipped) — expect green.
 
+### ed3d563 results (run 31943639350, 2026-08-16 ~11:40 UTC)
+
+- **metal (arm64): ✅ GREEN in 13 min** (build+ctest) — the -j4 cap + no ccache worked;
+  also much faster than the 46-min runs, so those were inflated by EAGAIN thrashing
+  and/or a slower macos-latest image than today's.
+- **cpu (x64): ❌ Build OK (~11 min), ctest 49/50** —
+  `supertonic_vector_convnext_exp_test ***Timeout 600.04 sec`. Root cause: real model
+  inference runs **single-threaded on macOS** (OpenMP off for AppleClang) → >10 min on
+  the Intel runner; fits in 600 s on linux (4 OpenMP threads). NOT a code bug.
+  (Intel x64 build is ~11 min, not the 80 min estimated earlier — the "stuck at 77%"
+  run was EAGAIN-stalled, not representative.)
+- **CI (linux) re-run: ✅ all green** (control: ccache step skipped on ci/** pushes).
+- Fix **09e58a0**: per-test `TIMEOUT` in the top-level CMakeLists (600 s default loop
+  preserving existing 120/180/300/60 s; 1800 s for supertonic) + removed the global
+  `ctest --timeout 600` from all 3 workflows (it would override per-test values).
+  Verified locally: all 50 tests carry an explicit TIMEOUT in CTestTestfile.cmake.
+
 Next steps:
-1. Watch the new CI (macos) run (ed3d563). The old in-progress x64 job was cancelled by
-   the push (concurrency). Expected: metal builds in ~60-90 min at -j4 (no ccache),
-   then ctest; x64 is slow (Intel) + scarce pool (2h+ queue observed).
-2. If the build is green but **ctest fails** → finally see which metal test(s) fail
-   (yesterday's failure at the Test step was never readable, log lost). User policy:
-   never-covered test issue → defer + FT entry.
-3. If EAGAIN recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show the
-   headroom → drop to -j2, or check the process count for a leak.
+1. Watch the 09e58a0 runs: CI (macos) x64 should now pass supertonic within 1800 s
+   (total job ≈ 11 min build + ~15 min tests + up to 30 min supertonic < 300 min
+   timeout); metal re-runs (~13 min, expect green); linux/windows/nix re-run on the
+   CMakeLists path filter (expect green — the timeout change is inert on those runners
+   where every test already fits in 600 s).
+2. If EAGAIN ever recurs at -j4: the printed `ulimit -a`/`kern.maxproc*` lines show
+   the headroom → drop to -j2.
+3. If the x64 supertonic test STILL times out at 1800 s → user policy: defer
+   (FT entry: skip it on macOS x64, e.g. LABELS + `-LE` in that job only).
 4. Manual once: run the windows **cuda dispatch job** from the UI (FT-6; choco cuda
    12.9.0.576 install unverified).
 

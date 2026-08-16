@@ -166,7 +166,24 @@ limits tell us the headroom (consider -j2 or dropping ccache for one diagnostic 
 
 ---
 
-## 10. CI never covered GPU backends → silent bit-rot  [process note]
+## 11. supertonic_vector_convnext_exp_test timed out at 600 s on macos-15-intel  [FIXED]
+
+CI (macos) run 31943639350 (ed3d563), cpu (x64) job: build OK, ctest 49/50 —
+`supertonic_vector_convnext_exp_test ***Timeout 600.04 sec`. The test runs a real
+model inference; on the Intel macOS runner it runs **single-threaded** (AppleClang has
+no OpenMP runtime → `ENGINE_ENABLE_OPENMP=OFF` on all macOS builds), while on the linux
+runner it uses 4 OpenMP threads → fits in 600 s there. Not a code bug, just slow.
+
+Fix (09e58a0): per-test `TIMEOUT` properties set in the top-level CMakeLists (tests
+section, end of `if (ENGINE_BUILD_TESTS)`): 600 s default for every test that has no
+explicit value (loop over `get_property(... DIRECTORY PROPERTY TESTS)`, preserving the
+pre-existing 120/180/300/60 s values), 1800 s for supertonic. The workflows' global
+`ctest --timeout 600` was removed (it would override per-test properties) — timeouts
+now live in CMake, so local `ctest` behaves like CI.
+
+---
+
+## 12. CI never covered GPU backends → silent bit-rot  [process note]
 
 Pre-refactor CI built cpu/vulkan only. CUDA/HIP/Metal/Windows-GPU code paths had zero build
 verification (they only compiled when Docker builds happened to pass). The new
