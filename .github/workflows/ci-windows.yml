@@ -8,7 +8,14 @@
 #
 #   - cpu:    build + ctest
 #   - vulkan: LunarG SDK installed from a pinned URL, build only
-#   - cuda:   CUDA toolkit preinstalled on the runner image, build only
+#   - cuda:   build only, manual dispatch only (see below)
+#
+# The cuda job is gated to workflow_dispatch, like llama.cpp's
+# build-cuda-windows.yml ("very heavy on the CI"): the runner image ships
+# no CUDA toolkit, so the job installs it first. The windows-2025 image
+# has no GPU, so this is compile verification only (arch 89, explicit).
+# If the choco 'cuda' package misbehaves, fall back to the NVIDIA redist
+# zip approach (see llama.cpp's .github/actions/windows-setup-cuda).
 #
 # ccache is intentionally not used on Windows (MSVC+ccache works, but it is
 # unproven here; add later if the jobs get slow).
@@ -76,20 +83,10 @@ jobs:
             preset: windows-cpu-release
             build_tests: "ON"
             run_tests: true
-            cuda_arch: ""
           - name: vulkan (x64)
             preset: windows-vulkan-release
             build_tests: "OFF"
             run_tests: false
-            cuda_arch: ""
-          - name: cuda (x64)
-            preset: windows-cuda-release
-            build_tests: "OFF"
-            run_tests: false
-            # Explicit arch: the runner has no GPU, so 'auto' (nvidia-smi)
-            # would find nothing and 'native' would fall back to sm_75
-            # (see wip/ci-bugs-found.md #1).
-            cuda_arch: "89"
 
     steps:
       - name: Checkout
@@ -111,20 +108,49 @@ jobs:
       - name: Build (all targets)
         shell: pwsh
         run: |
-          # Hashtable splat for named-argument binding (an array splat would
-          # bind positionally and hit -Jobs).
-          $extra = @{}
-          if ("${{ matrix.cuda_arch }}" -ne "") {
-            $extra = @{ "-CudaArchitectures" = "${{ matrix.cuda_arch }}" }
-          }
           .\scripts\build_windows.ps1 `
             -Preset "${{ matrix.preset }}" `
             -Target "" `
-            -BuildTests "${{ matrix.build_tests }}" `
-            @extra
+            -BuildTests "${{ matrix.build_tests }}"
 
       - name: Test
         if: ${{ matrix.run_tests }}
         shell: pwsh
         run: |
           ctest --test-dir "build/${{ matrix.preset }}" --output-on-failure --timeout 600
+
+  # Manual-dispatch only, like llama.cpp's build-cuda-windows.yml ("very
+  # heavy on the CI"): the runner image ships no CUDA toolkit, so the job
+  # installs one first.
+  cuda:
+    name: cuda (x64)
+    runs-on: windows-2025
+    timeout-minutes: 120
+    if: ${{ github.event_name == 'workflow_dispatch' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install CUDA toolkit
+        shell: pwsh
+        run: |
+          # The runner image has no CUDA toolkit. 12.9.0 matches the
+          # Dockerfile pin; the choco package installs the standard
+          # C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.9.0
+          # layout, which build_windows.ps1 discovers automatically.
+          # (Fallback if the choco package misbehaves: the NVIDIA redist
+          # zip approach, see llama.cpp's .github/actions/windows-setup-cuda.)
+          choco install cuda -y --version=12.9.0.576
+
+      - name: Build (all targets)
+        shell: pwsh
+        run: |
+          # Explicit arch: the runner has no GPU, so 'auto' (nvidia-smi)
+          # would find nothing and 'native' would fall back to sm_75
+          # (see wip/ci-bugs-found.md #1).
+          .\scripts\build_windows.ps1 `
+            -Preset windows-cuda-release `
+            -Target "" `
+            -BuildTests OFF `
+            -CudaArchitectures 89
