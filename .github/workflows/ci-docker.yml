@@ -61,13 +61,13 @@ jobs:
         include:
           - name: cpu
             dockerfile: .devops/cpu.Dockerfile
-            extra_args: ""
+            cuda_version: ""
           - name: cuda12
             dockerfile: .devops/cuda.Dockerfile
-            extra_args: "CUDA_VERSION=12.9.2 CUDA_DOCKER_ARCH=89-real"
+            cuda_version: "12.9.2"
           - name: cuda13
             dockerfile: .devops/cuda.Dockerfile
-            extra_args: "CUDA_VERSION=13.3.0 CUDA_DOCKER_ARCH=89-real"
+            cuda_version: "13.3.0"
 
     steps:
       - name: Checkout
@@ -87,11 +87,13 @@ jobs:
           load: true
           tags: local/audiocpp-validate-${{ matrix.name }}:ci
           # Only the args that affect build content; label args keep the
-          # Dockerfile defaults (this is a validation build).
+          # Dockerfile defaults (this is a validation build). One build arg
+          # per line — docker/build-push-action parses each line as KEY=VALUE.
           build-args: |
             APP_VERSION=${{ github.sha }}
             APP_REVISION=${{ github.sha }}
-            ${{ matrix.extra_args }}
+            ${{ matrix.cuda_version && format('CUDA_VERSION={0}', matrix.cuda_version) || '' }}
+            ${{ matrix.cuda_version && 'CUDA_DOCKER_ARCH=89-real' || '' }}
           # GHA cache: read-only for fork PRs (no cache poisoning).
           cache-from: type=gha
           cache-to: type=gha,mode=max
