@@ -111,9 +111,10 @@ output (they can see it in the UI).
    the 2nd push / first PR. Not a problem for the upstream PR (PR diff includes the workflow).
    Also disproved: workflows do NOT need to exist on the default branch to run for push events
    (nix-build ran though it's absent on the default branch `release-0.1`).
-2. **`nvcc -arch=native` falls back to sm_75 on GPU-less machines** — the CMake else-branch
-   (`CUDA_ARCHITECTURES native`) means the *published* Docker CUDA images are sm_75-only.
-   See `wip/ci-bugs-found.md` #1.
+2. **`nvcc -arch=native` falls back to sm_75 on GPU-less machines** — the old CMake else-branch
+   (`CUDA_ARCHITECTURES native`) made the *published* Docker CUDA images sm_75-only.
+   **Fixed upstream 2026-08-23** (PR #280 / 62735ea: portable default arch list before
+   `enable_language(CUDA)` + `CUDA_DOCKER_ARCH` build-arg). See `wip/ci-bugs-found.md` #1.
 3. Untracked local files `PR.md`, `docs/architecture/`, `tests/perf/benchmark_cpu_variants.py`
    are the user's work-in-progress — **never commit them** (already accidentally committed once;
    was reset+recommitted cleanly).
@@ -201,8 +202,9 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
   `rocm/dev-ubuntu-22.04:6.1.2` pin or 6.4.4 flag fixes. Unblocks: re-adding the `hip` job
   to `ci-linux.yml` (removed for now; its exact former content is in git history, commit
   `0fe8845`).
-- **FT-3: sm_75 Docker images** (bugs doc #1) — product issue, file upstream, out of scope
-  for the CI refactor (CI itself uses an explicit arch).
+- **FT-3: sm_75 Docker images** (bugs doc #1) — **RESOLVED upstream 2026-08-23** (PR #280 /
+  62735ea, merged in d25ffac). Portable default arch list in CMake + CUDA_DOCKER_ARCH
+  Dockerfile arg. No action left.
 - **FT-4: aarch64-linux nix cross-builds** — `nix build .#cpu --system aarch64-linux`
   etc. not covered by ci-nix.yml (referenced in that file's header).
 - **FT-5: nix cuda/rocm/rocm-gfx1151 package coverage** — never in CI before (old
@@ -216,7 +218,27 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
   Actions UI (or API dispatch once the workflow is on a default branch) and confirm
   the build; fallback install = llama.cpp's NVIDIA redist-zip action pattern.
 
-## 8. State + immediate next steps (updated 2026-08-16 ~13:40 UTC — ALL GREEN)
+## 8. State + immediate next steps (updated 2026-08-23 — rebased onto upstream d25ffac)
+
+### Rebase onto upstream/main d25ffac (2026-08-23)
+
+- Fork `main` fast-forwarded 0c9422c → d25ffac and pushed to origin; `feat/refactor-workflow`
+  rebased on top (25 commits, 2 conflicts resolved):
+  1. `test_scaled_dot_product_attention.cpp` — upstream (3ced600) rewrote the test to be
+     **hybrid** (probe CUDA, else run CPU parity cases) → we took upstream's version verbatim;
+     our exit-125 skip design is superseded (the test now runs in every CI job, which is
+     strictly better coverage).
+  2. `CMakeLists.txt` — upstream gated `server_model_installer_test` behind
+     `AUDIOCPP_BUILD_NATIVE_MODEL_MANAGER` (OFF default; never in our CI test list) → kept
+     upstream structure, timeout block placed after the `endif()`.
+- Follow-up sync: SDPA's `SKIP_RETURN_CODE 125` + `TIMEOUT 300` removed (dead config — the
+  test no longer exits 125, and the CPU path now runs real work under the 600 s default);
+  `ci-docker.yml` timeout 45 → 90 min (CUDA jobs now compile the portable multi-arch default
+  list from upstream #280 instead of single sm_75); bug #1 / FT-3 marked resolved upstream
+  (PR #280 / 62735ea).
+- Watch item on next CI runs: the SDPA test now executes its CPU parity path for the first
+  time on linux/windows/macos CPU jobs (thresholds from upstream 3ced600, untested by any CI
+  until now).
 
 ### Status board (branch `ci/linux-workflow`, tip e18a9ae) — **ALL SIX WORKFLOWS GREEN (2026-08-16 23:00 UTC)**
 
@@ -317,9 +339,9 @@ Fix pushed (**ed3d563**):
   Confirmed: docker+buildx work fine on GH ubuntu runners; smoke test passes incl.
   CUDA images (no GPU needed for --help). NOTE: binaries live at /app/<bin> in the
   final image (COPY --from=build /app/full /app) — not /app/full/.
-- sm_75 note: the CUDA validation build compiles sm_75 (nvcc -arch=native on GPU-less
-  runner) = exactly what the published image does today (bugs #1); an explicit-arch
-  fix validates here.
+- Post-rebase (d25ffac): the sm_75 problem is fixed upstream (PR #280) — the CUDA
+  validation builds now compile the portable default arch list (multi-arch, slow),
+  exactly what docker.yml publishes. ci-docker timeout raised 45 → 90 min.
 
 Next steps:
 1. **Phase 2 (remaining)**: ci-webui.yml (SvelteKit in webui/native — check

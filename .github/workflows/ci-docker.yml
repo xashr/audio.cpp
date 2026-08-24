@@ -12,9 +12,11 @@
 #   - a runtime smoke test after the build (catches broken runtime deps,
 #     missing libs, bad COPYs — things the build stage cannot see)
 #
-# Note: the CUDA image compiles for sm_75 here (nvcc -arch=native on a
-# GPU-less runner) — that is exactly what the published image does today
-# (see wip/ci-bugs-found.md #1); an explicit-arch fix will validate here.
+# CUDA archs: no CMAKE_CUDA_ARCHITECTURES / CUDA_DOCKER_ARCH is passed, so the
+# images build with the portable default arch list from CMakeLists.txt
+# (llama.cpp/ggml-cuda style; upstream #280) — exactly what docker.yml
+# publishes. That makes the CUDA jobs multi-arch (slow: 30-75 min cold);
+# pass CUDA_DOCKER_ARCH to narrow the set for faster local validation.
 
 name: CI (docker)
 
@@ -51,7 +53,7 @@ jobs:
   validate:
     name: validate (${{ matrix.name }}, amd64)
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 90
     strategy:
       fail-fast: false
       matrix:

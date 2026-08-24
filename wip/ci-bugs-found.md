@@ -5,7 +5,7 @@ Items marked **[FIXED in branch]** are already handled on the branch; the rest a
 
 ---
 
-## 1. Published Docker CUDA images are effectively sm_75-only  [OPEN → FT-3 — product bug]
+## 1. Published Docker CUDA images are effectively sm_75-only  [FIXED upstream 2026-08-23, PR #280 / commit 62735ea — was OPEN → FT-3]
 
 **Symptom:** the daily Docker workflow builds `full-cuda12`/`full-cuda13` images on GPU-less
 GitHub runners. `.devops/cuda.Dockerfile` passes no `CMAKE_CUDA_ARCHITECTURES`, so
@@ -31,8 +31,16 @@ compatibility is limited; Blackwell in particular dropped older SASS).
 - The CI job (`ci-linux.yml` CUDA) intentionally uses explicit `-DCMAKE_CUDA_ARCHITECTURES=89`
   (fast, deterministic, compile-verification only).
 
-**Action:** file upstream issue (affects all published cuda12/cuda13 images, including
-`full-cuda12-YYYYMMDD-*` immutable tags).
+**Resolution (2026-08-23):** fixed upstream in PR #280 (commit 62735ea, merged to main
+d25ffac): CMakeLists.txt now defaults to the llama.cpp/ggml-cuda portable arch list
+(50-v/61-v/70-v/75-v/80-v/86-real/89-real/90-v/120a-real on CUDA 12.x; subset on 13.x)
+*before* `enable_language(CUDA)` so the nvcc default-arch seed (CMP0104) no longer applies;
+`.devops/cuda.Dockerfile` gained a `CUDA_DOCKER_ARCH` build-arg passthrough (default =
+the portable list). `ci-docker.yml` intentionally passes no arch override so it validates
+exactly the published configuration (hence the 90 min job timeout).
+
+**Action:** none — resolved. (Images published before 2026-08-23 remain sm_75-only; the
+daily docker.yml re-publishes `latest` daily so they self-heal.)
 
 ---
 
