@@ -12,11 +12,12 @@
 #   - a runtime smoke test after the build (catches broken runtime deps,
 #     missing libs, bad COPYs — things the build stage cannot see)
 #
-# CUDA archs: no CMAKE_CUDA_ARCHITECTURES / CUDA_DOCKER_ARCH is passed, so the
-# images build with the portable default arch list from CMakeLists.txt
-# (llama.cpp/ggml-cuda style; upstream #280) — exactly what docker.yml
-# publishes. That makes the CUDA jobs multi-arch (slow: 30-75 min cold);
-# pass CUDA_DOCKER_ARCH to narrow the set for faster local validation.
+# CUDA archs: PR validation only needs one arch to prove the Dockerfile,
+# cmake configure, compilation and runtime stage work — the CUDA jobs pin
+# CUDA_DOCKER_ARCH=89-real (the arg added by upstream #280), consistent with
+# the ci-linux (89) and ci-windows (89) jobs. The full portable default arch
+# list (what docker.yml actually publishes) is validated by the daily
+# docker.yml build itself, which would visibly fail there if it broke.
 
 name: CI (docker)
 
@@ -53,7 +54,7 @@ jobs:
   validate:
     name: validate (${{ matrix.name }}, amd64)
     runs-on: ubuntu-24.04
-    timeout-minutes: 90
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -63,10 +64,10 @@ jobs:
             extra_args: ""
           - name: cuda12
             dockerfile: .devops/cuda.Dockerfile
-            extra_args: "CUDA_VERSION=12.9.2"
+            extra_args: "CUDA_VERSION=12.9.2 CUDA_DOCKER_ARCH=89-real"
           - name: cuda13
             dockerfile: .devops/cuda.Dockerfile
-            extra_args: "CUDA_VERSION=13.3.0"
+            extra_args: "CUDA_VERSION=13.3.0 CUDA_DOCKER_ARCH=89-real"
 
     steps:
       - name: Checkout

@@ -233,9 +233,12 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
      upstream structure, timeout block placed after the `endif()`.
 - Follow-up sync: SDPA's `SKIP_RETURN_CODE 125` + `TIMEOUT 300` removed (dead config — the
   test no longer exits 125, and the CPU path now runs real work under the 600 s default);
-  `ci-docker.yml` timeout 45 → 90 min (CUDA jobs now compile the portable multi-arch default
-  list from upstream #280 instead of single sm_75); bug #1 / FT-3 marked resolved upstream
-  (PR #280 / 62735ea).
+  bug #1 / FT-3 marked resolved upstream (PR #280 / 62735ea).
+- **ci-docker CUDA jobs pin `CUDA_DOCKER_ARCH=89-real`** (the build-arg added by #280):
+  upstream's portable default is now a 9-arch list for every un-pinned CUDA build, which
+  would make the PR validation jobs 2-3× slower for no validation gain — one arch proves
+  the Dockerfile/cmake/compile/runtime stage, and the full default list stays validated by
+  the daily docker.yml publish (consistent with ci-linux + ci-windows, both pinned to 89).
 - Watch item on next CI runs: the SDPA test now executes its CPU parity path for the first
   time on linux/windows/macos CPU jobs (thresholds from upstream 3ced600, untested by any CI
   until now).
