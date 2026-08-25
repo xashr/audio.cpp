@@ -220,6 +220,18 @@ skipped for now and logged here instead of being deep-dived in the CI refactor.
 
 ## 8. State + immediate next steps (updated 2026-08-23 — rebased onto upstream d25ffac)
 
+### Final state after rebase (2026-08-25) — **ALL SIX WORKFLOWS GREEN on 00fd73a**
+
+- CI (docker) run 32783781467 on 00fd73a: cpu 14m, cuda13 **3m (warm GHA cache)**, cuda12 33m (cold).
+  Timeline of the last fixes: build-args one-arg-per-line bug (space-joined pair corrupted
+  CUDA_VERSION) → 80b6fa3; cuda12 cold build hit the 45-min job timeout on a slow runner →
+  timeout now **90 min** (free runner performance varies a lot; warm builds take ~3 min).
+- CI (linux) 32777586576, CI (macos) 32777586507, CI (windows) 32777586561, CI (nix)
+  32777586522 all green on b14908e (00fd73a only changed ci-docker.yml + wip docs, so those
+  results stand). Notably: the **SDPA test's new CPU parity path passed on all three OS jobs**
+  (upstream 3ced600's thresholds, first CI exposure), and the suite is now 58 tests.
+- Branch tip: 00fd73a. Ready for upstream PR prep (drop wip/, required-checks proposal).
+
 ### Rebase onto upstream/main d25ffac (2026-08-23)
 
 - Fork `main` fast-forwarded 0c9422c → d25ffac and pushed to origin; `feat/refactor-workflow`
